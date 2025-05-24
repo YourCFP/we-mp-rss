@@ -10,6 +10,7 @@ import os
 import re
 import json
 class Wx:
+    SESSION=None
     wx_login_url="wx_qrcode.png"
     def check_dependencies(self):
         """检查必要的依赖包"""
@@ -51,8 +52,20 @@ class Wx:
         except Exception as e:
             print(f"提取token时出错: {str(e)}")
             return None
-
-    def wxLogin(self):
+    def GetCode(self,Callback=None):
+        print("子线程执行中")
+        from threading import Thread
+        thread = Thread(target=self.wxLogin,args=(Callback,))  # 传入函数名
+        thread.start()  # 启动线程
+        print("微信公众平台登录脚本 v1.3")
+        return WX_API.QRcode()
+    domain="/res/"    
+    wait_time=10
+    def QRcode(self):
+        while  not os.path.exists(self.wx_login_url):
+            return None
+        return f"{self.domain}{self.wx_login_url}"
+    def wxLogin(self,Callback=None):
         """
         微信公众平台登录流程：
         1. 检查依赖和环境
@@ -82,9 +95,8 @@ class Wx:
             ActionChains(controller.driver).move_to_element(qrcode).perform()
             
             # 确保二维码可见
-            wait = WebDriverWait(controller.driver, 10)
+            wait = WebDriverWait(controller.driver, self.wait_time)
             wait.until(EC.visibility_of(qrcode))
-            
             # 全屏截图并裁剪二维码区域
             print("正在生成二维码图片...")
             controller.driver.save_screenshot("temp_screenshot.png")
@@ -104,6 +116,7 @@ class Wx:
             os.remove("temp_screenshot.png")
             
             print("二维码已保存为 wx_qrcode.png，请扫码登录...")
+            self.HasCode=True
             
             # 等待登录成功（检测页面跳转）
             print("等待扫码登录...")
@@ -123,23 +136,25 @@ class Wx:
             if token:
                 print(f"\n获取到的Token: {token}")
             
-            return {
+            self.SESSION= {
                 'cookies': cookies,
                 'token': token,
-                'wx_login_url': wx_login_url,
+                'wx_login_url': self.wx_login_url,
             }
-            
+            if Callback!=None:
+                Callback(self.SESSION)
         except Exception as e:
             print(f"\n错误发生: {str(e)}")
             print("可能的原因:")
             print("1. 请确保已安装Firefox浏览器")
             print("2. 请确保geckodriver已下载并配置到PATH中")
             print("3. 检查网络连接是否可以访问微信公众平台")
-            return None
+            self.SESSION=None
         finally:
             self.clean()
             if 'controller' in locals():
                 controller.close()
+        return self.SESSION
     def clean(self):
         try:
             os.remove(self.wx_login_url)

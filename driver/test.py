@@ -1,12 +1,17 @@
+import asyncio
 from wx import WX_API
-if __name__ == "__main__":
-    print("微信公众平台登录脚本 v1.3")
-    print("="*40)
-    result = WX_API.wxLogin()
-    if result:
-        print("\n登录结果:")
-        print(f"Cookies数量: {len(result['cookies'])}")
-        print(f"Token: {result['token']}")
+from threading import Thread
+def Success(data):
+    if data != None:
+            print("\n登录结果:")
+            print(f"Cookies数量: {len(data['cookies'])}")
+            print(f"Token: {data['token']}")
     else:
-        print("\n登录失败，请检查上述错误信息")
-    print("="*40)
+            print("\n登录失败，请检查上述错误信息")
+def task():
+    code_url=WX_API.GetCode(Success)
+    print(f"code url:{code_url}")
+    WX_API.QRcode()
+
+if __name__ == "__main__":
+    task()
