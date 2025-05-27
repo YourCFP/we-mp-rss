@@ -34,6 +34,9 @@ async def qr_image():
 @router.get("/qr/status",summary="获取扫描状态")
 async def qr_status():
      return success_response(WX_API.HasLogin)    
+@router.get("/qr/over",summary="扫码完成")
+async def qr_success():
+     return success_response(WX_API.Close())    
 @router.post("/login", summary="用户登录")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     user = authenticate_user(form_data.username, form_data.password)
@@ -54,7 +57,6 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         "token_type": "bearer",
         "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
     })
-
 @router.post("/logout", summary="用户注销")
 async def logout(current_user: dict = Depends(get_current_user)):
     return {"code": 0, "message": "注销成功"}

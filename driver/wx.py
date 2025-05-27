@@ -91,6 +91,7 @@ class Wx:
             self.clean()
             # 初始化浏览器控制器
             controller = FirefoxController()
+            self.controller=controller
             # 启动浏览器并打开微信公众平台
             print("正在启动浏览器...")
             controller.start_browser()
@@ -169,6 +170,15 @@ class Wx:
             if 'controller' in locals():
                 controller.close()
         return self.SESSION
+    def Close(self):
+        rel=False
+        try:
+                self.controller.close()
+                rel=True
+        except:
+            print("浏览器未启动")
+            pass
+        return rel
     def clean(self):
         try:
             os.remove(self.wx_login_url)

@@ -74,3 +74,42 @@ async def get_article_detail(
         return success_response(article)
     finally:
         session.close()
+
+@router.delete("/{article_id}", summary="删除文章")
+async def delete_article(
+    article_id: int,
+    current_user: dict = Depends(get_current_user)
+):
+    session = DB.get_session()
+    try:
+        from core.models.article import Article
+        from .base import error_response
+        
+        # 检查文章是否存在
+        article = session.query(Article).filter(Article.id == article_id).first()
+        if not article:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=error_response(
+                    code=40401,
+                    message="文章不存在"
+                )
+            )
+        
+        # 删除文章
+        session.delete(article)
+        session.commit()
+        
+        from .base import success_response
+        return success_response(None, message="文章删除成功")
+    except Exception as e:
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=error_response(
+                code=50001,
+                message=f"删除文章失败: {str(e)}"
+            )
+        )
+    finally:
+        session.close()

@@ -68,6 +68,6 @@ DEBUG=cfg.get("debug",False)
 APP_NAME=cfg.get("app_name","we-mp-rss")
 
 
-VERSION='1.3.0'
+VERSION='1.3.1'
 
 print(VERSION)

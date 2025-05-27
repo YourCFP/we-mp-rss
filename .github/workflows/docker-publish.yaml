@@ -4,7 +4,7 @@ on:
     branches:
       - main
     paths:  # 仅在指定文件变化时触发（可选）
-      - 'ReadMe.md'
+      # - 'ReadMe.md'
       - 'core/config.py'
 #   release:
 #     types: [published]

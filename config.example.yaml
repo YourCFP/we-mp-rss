@@ -11,3 +11,6 @@ notice:
 secret: ${SECRET:- 'we-mp-rss'}
 token: 
 user_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.39...
+
+#定时任务执行间隔时间 单位秒 默认300s
+interval: $(INTERVAL:- 300)
