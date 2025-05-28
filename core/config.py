@@ -66,5 +66,5 @@ cfg=Config()
 config = cfg.get_config()
 DEBUG=cfg.get("debug",False)
 APP_NAME=cfg.get("app_name","we-mp-rss")
-from ver import VERSION
+from core.ver import VERSION
 print(VERSION)

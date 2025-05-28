@@ -2,7 +2,7 @@ import schedule, time
 import core.wx as wx 
 import core.db as db
 from core.config import DEBUG,cfg
-import core.notice as notice
+
 import random
 import core.log as log
 from datetime import datetime
@@ -35,15 +35,15 @@ def do_job():
         faker_id=item.faker_id
         mp_id=item.id
         print(f'正在更新公众号：{item.mp_name}({item.id})')
-        if not DEBUG:
             # 获取对应公众号列表
-            data=wx.get_list(faker_id,mp_id,0)
-            for art in data:
-                # 添加到数据库
-                # delete_article(art['id'])
-                if  wx_db.add_article(art):
-                    mps_count=mps_count+1
-                    text_list+=f"{mps_count}. [{art['title']}](https://mp.weixin.qq.com/s/{art['id']})[{art['created_at']}]\n"
+        data=wx.get_list(faker_id,mp_id,0)
+        for art in data:
+            # 添加到数据库
+            if DEBUG:
+                delete_article(art['id'])
+            if  wx_db.add_article(art):
+                mps_count=mps_count+1
+                text_list+=f"{mps_count}. [{art['title']}](https://mp.weixin.qq.com/s/{art['id']})[{art['created_at']}]\n"
         else:
             print("调试模式，不进行更新")
 
@@ -68,11 +68,11 @@ def start():
         time.sleep(10)
 
 def send_notice(text:str="",title:str=""):
-    markdown_text = f"""### {title} 通知
-    {text}
-    """
-    webhook=cfg.get('notice')['dingding']
-    notice.send_dingtalk_markdown(webhook, title, markdown_text)
+    markdown_text = f"### {title} 通知\n{text}"
+    webhook = cfg.get('notice')['dingding']
+    # 修正参数顺序
+    from core.notice import notice
+    notice(webhook, title, markdown_text)
 
 if __name__ == '__main__':
     do_job()
