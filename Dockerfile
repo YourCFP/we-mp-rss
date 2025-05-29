@@ -7,8 +7,8 @@ RUN export PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
 # 复制Python依赖文件
 # 复制后端代码
 COPY . .
-COPY requirements.txt .
-RUN pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+# COPY requirements.txt .
+# RUN pip3 install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 
 RUN rm -rf ./web_ui
 RUN rm -rf ./venv
