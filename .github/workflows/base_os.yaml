@@ -17,6 +17,6 @@ jobs:
       - name: Sow env
         run: cat /home/runner/.docker/config.json    
       - name: Build Docker Image
-        run: docker build -t ghcr.io/rachelos/python38:latest .
+        run: docker build -t ghcr.io/rachelos/python38:latest ./script/Dockerfile
       - name: Push Docker Image
         run: docker push  ghcr.io/rachelos/python38:latest

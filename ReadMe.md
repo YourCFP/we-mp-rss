@@ -4,6 +4,12 @@
 
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)]()
 [![License](https://img.shields.io/badge/license-MIT-green.svg)]()
+
+快速运行
+```
+docker run -d  --name we-mp-rss  -p 8001:8001   ghcr.io/rachelos/we-mp-rss:latest
+```
+http://<您的ip>:8001/  即可开启
 </div>
 
 一个用于订阅和管理微信公众号内容的工具，提供RSS订阅功能。

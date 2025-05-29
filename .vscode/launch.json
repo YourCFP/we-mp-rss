@@ -11,7 +11,7 @@
             "env": {
                 // "DB":"sqlite:///db.db",
                 "DB":"mysql+pymysql://we-rss:123456@119.3.239.67/we-rss",
-                "PORT": "8080",
+                "PORT": "8001",
                 "USERNAME":"admin",
                 "PASSWORD":"admin@123",
                 "DEBUG": "True",
