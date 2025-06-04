@@ -7,3 +7,4 @@ db.db
 .vscode
 *.log
 item
+static/cache
