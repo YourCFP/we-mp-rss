@@ -37,7 +37,6 @@ class RSS:
                     description: str = "RSS频道", language: str = "zh-CN",others: dict = None):
         # 创建根元素(RSS标准)
         rss = ET.Element("rss", version="2.0")
-        # rss.attrib["xmlns"] = "http://www.w3.org/2005/Atom"
         channel=ET.SubElement(rss, "channel")
         # 设置渠道信息
         ET.SubElement(channel, "title").text = title
@@ -52,6 +51,8 @@ class RSS:
             ET.SubElement(item, "title").text = rss_item["title"]
             ET.SubElement(item, "description").text = rss_item["description"]
             ET.SubElement(item, "guid").text = rss_item["link"]
+            # ET.SubElement(item, "category").text = rss_item["category"]
+            # ET.SubElement(item, "author").text = rss_item["author"]
             link=ET.SubElement(item, "link")
             link.text = rss_item["link"]
             ET.SubElement(item, "pubDate").text = self.datetime_to_rfc822(str(rss_item["updated"]))
