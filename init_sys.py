@@ -12,7 +12,7 @@ import os
 from core.print import print_info, print_error
 def init_user(_db: db.Db):
     try:
-      username,password=os.getenv("USERNAME", "admin"),os.getenv("PASSWORD", "admin@888")
+      username,password=os.getenv("USERNAME", "admin"),os.getenv("PASSWORD", "admin@123")
       _db.create_tables()
      
       _db.session.merge(User(
