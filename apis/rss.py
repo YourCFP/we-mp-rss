@@ -137,7 +137,7 @@ async def get_mp_articles_rss(
             media_type="application/xml"
         )
     except Exception as e:
-        print(f"获取公众号文章RSS错误: {str(e)}")
+        print(f"获取公众号文章RSS错误:",e)
         raise HTTPException(
             status_code=status.HTTP_406_NOT_ACCEPTABLE,
             detail=error_response(

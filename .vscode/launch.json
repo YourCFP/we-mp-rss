@@ -19,8 +19,8 @@
                 // "DINGDING_WEBHOOK":"https://oapi.dingtalk.com/robot/send?access_token=af7f99c32895f79d9d61c57181f164b77027102a22f3b205dc15e2984690025c"
                 // "DINGDING_WEBHOOK":"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=a7240ff8-2d2e-48b3-b02a-c6a37fee69f7"
             },
-            // "program": "main.py",
-            "program": "job.py",
+            "program": "main.py",
+            // "program": "job.py",
             // "program":"${file}",
             "args": ["-init", "True","-job","False"]
             // "args": ["-init", "True","-job","True"]
