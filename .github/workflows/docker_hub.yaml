@@ -39,8 +39,10 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
       - name: Log in to GHCR
         run: echo  ${{secrets.TOKEN}} | docker login ghcr.io -u  ${{github.actor}} --password-stdin
-      - name: Build  Image and push to Docker Hub
-        run: |-
-             docker build -t rachelos/${{github.repository}}:latest .
-             docker push rachelos/${{github.repository}}:latest
-          
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
