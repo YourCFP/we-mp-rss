@@ -137,3 +137,8 @@ def print_error(text, **kwargs):
 
 def print_info(text, **kwargs):
     printer.print_info(text, **kwargs)
+    
+def print_warning(text, **kwargs):
+    printer.print_warning(text, **kwargs)
+def print_success(text, **kwargs):
+    printer.print_success(text, **kwargs)

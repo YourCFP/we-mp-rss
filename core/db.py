@@ -52,10 +52,11 @@ class Db:
             from core.models.base import DATA_STATUS
             art.status=DATA_STATUS.ACTIVE
             self._session.add(art) 
+            # self._session.merge(art)
             self._session.commit()
         except Exception as e:
             self._session.rollback()
-            print(f"Failed to add article: {e}",e)
+            # print(f"Failed to add article: {e}",e)
             return False
         return True    
         

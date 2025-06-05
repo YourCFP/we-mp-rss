@@ -8,7 +8,7 @@ wx_db=db.Db()
 wx_db.init(cfg.get("db"))
 def delete_article(id:str):
     try:
-        session=wx_db.session
+        session=wx_db.get_session()
         article = session.query(Article).filter(Article.id == id).first()
         session.delete(article)
         session.commit()
@@ -27,3 +27,6 @@ def UpdateArticle(art:dict):
         mps_count=mps_count+1
         return True
     return False
+def Update_Over(data=None):
+    print("更新完成",data)
+    pass

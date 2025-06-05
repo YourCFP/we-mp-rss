@@ -1,13 +1,13 @@
 import queue
 import threading
 from typing import Callable, Any, Optional
-
+from core.print import print_error,print_info,print_warning,print_success
 class TaskQueueManager:
     """任务队列管理器，用于管理和执行排队任务"""
     
-    def __init__(self):
+    def __init__(self,maxsize=0):
         """初始化任务队列"""
-        self._queue = queue.Queue()
+        self._queue = queue.Queue(maxsize=maxsize)
         self._lock = threading.Lock()
         self._is_running = False
         
@@ -21,10 +21,10 @@ class TaskQueueManager:
         """
         with self._lock:
             self._queue.put((task, args, kwargs))
-        # print(f"任务添加成功")
+        print_success(f"队列任务添加成功")
     def run_task_background(self)->None:
         threading.Thread(target=self.run_tasks, daemon=True).start()  
-        print("任务队列后台运行")
+        print_warning("队列任务后台运行")
     def run_tasks(self) -> None:
         """执行队列中的所有任务，并持续运行以接收新任务"""
         with self._lock:
@@ -42,9 +42,10 @@ class TaskQueueManager:
                 try:
                     task(*args, **kwargs)
                 except Exception as e:
-                    print(f"任务执行失败: {e}")
+                    print_error(f"队列任务执行失败: {e}")
                 finally:
                     self._queue.task_done()
+                    print_success(f"队列任务执行完成")
         finally:
             with self._lock:
                 self._is_running = False

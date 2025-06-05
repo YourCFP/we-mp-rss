@@ -94,7 +94,7 @@ class TaskScheduler:
                 # 包装任务函数以捕获异常
                 def wrapped_func(*args, **kwargs):
                     try:
-                        logger.info(f"Executing job {job_id or 'anonymous'}")
+                        # logger.info(f"Executing job {job_id or 'anonymous'}")
                         return func(*args, **kwargs)
                     except Exception as e:
                         logger.error(f"Job {job_id or 'anonymous'} failed: {str(e)}")

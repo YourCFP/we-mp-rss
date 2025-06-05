@@ -24,6 +24,7 @@ class WxGather:
             wx=MpsApi()
         return wx
     def __init__(self,is_add:bool=False):
+        self.articles=[]
         self.is_add=is_add
         session=  requests.Session()
         timeout = (5, 10)
@@ -115,15 +116,19 @@ class WxGather:
           update_time=int(time.time()),
         ))
 
-    def Item_Over(self,item=None):
+    def Item_Over(self,item=None,CallBack=None):
         print(f"item end")
+        if CallBack is not None:
+            CallBack(item)
         pass
     def Error(self,error:str):
         self.Over()
         raise Exception(error)
-    def Over(self,data=None):
+    def Over(self,CallBack=None):
         if getattr(self, 'articles', None) is not None:
             print(f"成功{len(self.articles)}条")
+        if CallBack is not None:
+            CallBack(self)
 
 
     def dateformat(self,timestamp:any):

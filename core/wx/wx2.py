@@ -40,7 +40,7 @@ class MpsWeb(WxGather):
             return  js_content_div.prettify()
         return None
     # 重写 get_Articles 方法
-    def get_Articles(self, faker_id:str=None,Mps_id:str=None,Mps_title="",CallBack=None,begin:int=0,MaxPage:int=1,interval=1,Gather_Content=False):
+    def get_Articles(self, faker_id:str=None,Mps_id:str=None,Mps_title="",CallBack=None,begin:int=0,MaxPage:int=1,interval=1,Gather_Content=False,Item_Over_CallBack=None,Over_CallBack=None):
         super().Start(mp_id=Mps_id)
         if self.Gather_Content:
             Gather_Content=True
@@ -119,6 +119,6 @@ class MpsWeb(WxGather):
                 print(f"Request error: {e}")
                 break
             finally:
-                super().Item_Over()
-        super().Over()
+                super().Item_Over(item=item,CallBack=Item_Over_CallBack)
+        super().Over(CallBack=Over_CallBack)
         pass
