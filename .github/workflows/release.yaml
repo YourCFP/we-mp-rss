@@ -1,8 +1,8 @@
 name: Release Zip
 on:
-  push:
-    tags:
-      - "v*"
+   push:
+    branches:
+      - main
 
 jobs:
   build:
