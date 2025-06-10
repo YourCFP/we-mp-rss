@@ -1,5 +1,6 @@
 import http from './http'
 import axios from 'axios'
+import { Message } from '@arco-design/web-vue'
 export interface LoginParams {
   username: string
   password: string
@@ -67,12 +68,18 @@ export const QRCode = () => {
     }).catch(reject)
   })
 }
+let interval_status_Id:number=0
 export const checkQRCodeStatus = () => {
   return new Promise((resolve, reject) => {
-    const intervalId = setInterval(() => {
+     if (interval_status_Id) {
+      clearInterval(interval_status_Id);
+      qrCodeIntervalId = 0;
+    }
+      interval_status_Id = setInterval(() => {
         http.get("wx/auth/qr/status").then(response => {
           if(response?.login_status){
-            clearInterval(intervalId)
+            Message.success("授权成功")
+            clearInterval(interval_status_Id)
             resolve(response)
           }
         }).catch(err => {
