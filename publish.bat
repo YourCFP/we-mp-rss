@@ -52,9 +52,7 @@ if %COMMENT_FLAG%==1 (
 echo %comment%
 git add .
 git tag -a "v%VERSION%" -m "%VERSION%"
-if not "%comment%"=="" (
-    git commit -m "%VERSION% %comment%"
-)
+git commit -m "%VERSION% %comment%"
 
 REM 执行git操作
 if %PUSH_FLAG%==1 (
