@@ -3,8 +3,8 @@ from datetime import datetime, timedelta
 import os
 import json
 class RSS:
-    cache_dir = os.path.normpath("static/cache/rss")
-    content_cache_dir = os.path.normpath("static/cache/content")
+    cache_dir = os.path.normpath("data/cache/rss")
+    content_cache_dir = os.path.normpath("data/cache/content")
     rss_file="all"
     
     def __init__(self, name:str="all",cache_dir: str = None):

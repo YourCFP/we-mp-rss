@@ -297,6 +297,7 @@ class Wx:
             
     def check_lock(self):
         """检查锁定状态"""
+        time.sleep(1)
         return os.path.exists(self.lock_file_path)
         
     def set_lock(self):
