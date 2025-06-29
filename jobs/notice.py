@@ -27,6 +27,6 @@ def CallBackNotice():
         rss_domain=cfg.get("rss.base_url","")
         url=rss_domain+str(url)
         text=f"![二维码]({url})"
-        text+=f"<img src='{url}' width=100 height=100 />"
+        text+=f"<img src='{url}' width=40 height=40 />"
         text+=f"\n\n## 请使用微信扫描二维码进行授权"
-        sys_notice(text, "WeRss授权过期通知")
+        sys_notice(text, "WeRss授权过期")
