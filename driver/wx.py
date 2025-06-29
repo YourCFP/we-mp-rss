@@ -27,6 +27,8 @@ class Wx:
         self.refresh_interval=3660*24
         if not os.path.exists(self.lock_path):
             os.makedirs(self.lock_path)
+        self.Clean()
+        self.release_lock()
         pass
 
     def check_dependencies(self):
@@ -273,7 +275,6 @@ class Wx:
             pass
         return rel
     def Clean(self):
-        self.release_lock()
         try:
             os.remove(self.wx_login_url)
         except:
@@ -317,4 +318,3 @@ def DoSuccess(cookies:any) -> dict:
     data=WX_API.format_token(cookies)
     Success(data)
 WX_API = Wx()
-WX_API.Clean()
