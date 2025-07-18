@@ -152,7 +152,7 @@ class Config:
             for k in keys:
                 value = value[k]
             val=self.__fix(value)
-            if val is None and default is not None:
+            if val is None and default is not None or  val=="":
                 return default
             else:
                 return val

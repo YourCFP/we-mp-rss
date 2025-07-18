@@ -18,12 +18,10 @@
                   style="padding: 9px 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
                  <div style="display: flex; align-items: center;">
                    <img :src="Avatar(item.avatar)" width="40" style="float:left;margin-right:1rem;"/>
-                   <a-tooltip :content="item.mp_intro||item.mp_name" placement="top" color="#fff">
                    <a-typography-text  strong style="line-height:32px;">
                      {{ item.name || item.mp_name }}
                    </a-typography-text>
-                   </a-tooltip>
-                   <a-button v-if="activeMpId === item.id" size="mini" type="text" status="danger" @click="$event.stopPropagation(); deleteMp(item.id)" >
+                   <a-button v-if="activeMpId === item.id && item.id!=''" size="mini" type="text" status="danger" @click="$event.stopPropagation(); deleteMp(item.id)" >
                      <template #icon><icon-delete /></template>
                     </a-button>
                   </div>
@@ -38,12 +36,16 @@
     <a-layout-content :style="{ padding: '20px', width: '100%'}" >
       <a-page-header 
       :title="activeFeed ? activeFeed.name : '全部'" 
-      :subtitle="activeFeed ? '管理 ' + activeFeed.name + ' 的内容' : '管理您的公众号订阅内容'" :show-back="false">
+      :subtitle="'管理您的公众号订阅内容'" :show-back="false">
           <template #extra>
           <a-space>
-            <a-button @click="refresh">
+            <a-button @click="refresh" v-if="activeFeed?.id!=''">
               <template #icon><icon-refresh /></template>
               刷新
+            </a-button>
+            <a-button @click="clear_articles" v-else>
+              <template #icon><icon-delete /></template>
+              清理无效文章
             </a-button>
             <a-button @click="handleAuthClick">
               <template #icon><icon-scan /></template>
@@ -86,6 +88,7 @@
       </a-modal>
 
       <a-card style="border:0">
+        <a-alert type="success" closable>{{activeFeed?.mp_intro||"请选择一个公众号码进行管理,搜索文章后再点击订阅会有惊喜哟！！！"}}</a-alert>
         <div class="search-bar">
           <a-input-search v-model="searchText" placeholder="搜索文章标题" @search="handleSearch" @keyup.enter="handleSearch" allow-clear />
         </div>
@@ -140,8 +143,8 @@ import { Avatar } from '@/utils/constants'
 import { ref, onMounted, h } from 'vue'
 import axios from 'axios'
 import { IconApps, IconAtt, IconDelete, IconEdit, IconEye, IconRefresh, IconScan, IconWeiboCircleFill, IconWifi } from '@arco-design/web-vue/es/icon'
-import { getArticles,deleteArticle as deleteArticleApi  } from '@/api/article'
-import { getSubscriptions, UpdateMps } from '@/api/subscription'
+import { getArticles,deleteArticle as deleteArticleApi ,ClearArticle } from '@/api/article'
+import { getSubscriptions, UpdateMps} from '@/api/subscription'
 import { inject } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import { formatDateTime,formatTimestamp } from '@/utils/date'
@@ -252,7 +255,10 @@ const handleMpPageChange = (page: number, pageSize: number) => {
   fetchMpList()
 }
 const rssFormat = ref('atom')
-const activeFeed=ref()
+const activeFeed=ref({
+  id:"",
+  name:"全部",
+})
 const handleMpClick = (mpId: string) => {
   activeMpId.value = mpId
   pagination.value.current = 1
@@ -319,14 +325,17 @@ const openRssFeed = () => {
   const format = ['rss', 'atom', 'json'].includes(rssFormat.value) 
     ? rssFormat.value 
     : 'atom'
-  
+  let search=""
+  if(searchText.value!=""){
+    search="/search/"+searchText.value;
+  }
   if (!activeMpId.value) {
-    window.open(`/feed/all.${format}`, '_blank')
+    window.open(`/feed${search}/all.${format}`, '_blank')
     return
   }
   const activeMp = mpList.value.find(item => item.id === activeMpId.value)
   if (activeMp) {
-    window.open(`/feed/${activeMpId.value}.${format}`, '_blank')
+    window.open(`/feed${search}/${activeMpId.value}.${format}`, '_blank')
   }
 }
 
@@ -353,6 +362,16 @@ const handleRefresh = () => {
     end_page: refreshForm.value.endPage
   }).then(() => {
     Message.success('刷新成功')
+    refreshModalVisible.value = false
+  }).finally(() => {
+    fullLoading.value = false
+  })
+  fetchArticles()
+}
+const clear_articles = () => {
+  fullLoading.value = true
+  ClearArticle().then((res) => {
+    Message.success(res?.message||'清理成功')
     refreshModalVisible.value = false
   }).finally(() => {
     fullLoading.value = false

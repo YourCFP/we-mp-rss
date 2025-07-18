@@ -7,7 +7,7 @@ from core.models.feed import Feed
 from .base import success_response, error_response
 from core.auth import get_current_user
 from core.config import cfg
-
+from apis.base import format_search_kw
 def verify_rss_access(current_user: dict = Depends(get_current_user)):
     """
     RSS访问认证方法
@@ -27,7 +27,7 @@ def verify_rss_access(current_user: dict = Depends(get_current_user)):
 router = APIRouter(prefix="/rss",tags=["Rss"])
 feed_router = APIRouter(prefix="/feed",tags=["Feed"])
 
-@router.post("/{feed_id}/api", summary="获取特定RSS源详情")
+@router.get("/{feed_id}/api", summary="获取特定RSS源详情")
 async def get_rss_source(
     feed_id: str,
     request: Request,
@@ -173,6 +173,7 @@ async def get_mp_articles_source(
     ext:str="xml",
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    kw:str="",
     is_update:bool=True,
     # current_user: dict = Depends(get_current_user)
 ):
@@ -199,6 +200,7 @@ async def get_mp_articles_source(
             feed.mp_name=cfg.get("rss.title","WeRss")
             feed.mp_intro=cfg.get("rss.description","WeRss高效订阅我的公众号")
             feed.mp_cover=cfg.get("rss.cover",f"{rss_domain}static/logo.svg")    
+        
         if not feed:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -211,8 +213,9 @@ async def get_mp_articles_source(
         # 查询文章列表
         total = query.count()
         # articles = query.order_by(Article.publish_time.desc()).limit(limit).offset(offset).all()
+        if kw!="":
+            query=query.filter(Article.title.like(f"%{format_search_kw(kw)}%"))
         articles =query.order_by(Article.publish_time.desc()).limit(limit).offset(offset).all()
-
         # 转换为RSS格式数据
         import datetime
         rss_list = [{
@@ -262,6 +265,20 @@ async def rss(
     ext: str,
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    kw:str="",
     is_update:bool=True
 ):
-    return await get_mp_articles_source(request=request,feed_id=feed_id, limit=limit,offset=offset, is_update=is_update,ext=ext)
+    return await get_mp_articles_source(request=request,feed_id=feed_id, limit=limit,offset=offset, is_update=is_update,ext=ext,kw=kw)
+
+@feed_router.get("/search/{kw}/{feed_id}.{ext}", summary="获取公众号文章源")
+async def rss(
+    request: Request,
+    feed_id: str,
+    ext: str,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    kw:str="",
+    is_update:bool=True
+):
+    return await get_mp_articles_source(request=request,feed_id=feed_id, limit=limit,offset=offset, is_update=is_update,ext=ext,kw=kw)
+

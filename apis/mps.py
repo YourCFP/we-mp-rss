@@ -13,6 +13,8 @@ import os
 router = APIRouter(prefix=f"/mps", tags=["公众号管理"])
 def UpdateArticle(art:dict):
             return DB.add_article(art)
+
+
 @router.get("/search/{kw}", summary="搜索公众号")
 async def search_mp(
     kw: str = "",
@@ -269,4 +271,3 @@ async def delete_mp(
                 message="删除订阅号失败"
             )
         )
-
