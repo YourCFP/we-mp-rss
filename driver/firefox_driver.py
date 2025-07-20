@@ -305,7 +305,6 @@ class FirefoxController:
             # self.driver.set_window_size(100, 100)
             # if self.system == "windows":
             #     self.driver.set_window_position(-1000, 1000)
-            self.isClose=False
             return self.driver
         except WebDriverException as e:
             print(f"浏览器启动失败: {str(e)}")
@@ -316,8 +315,6 @@ class FirefoxController:
         self.Close()
     def open_url(self, url):
         """打开指定URL"""
-        if self.isClose:
-            self.start_browser()
         try:
             self.driver.get(url)
         except WebDriverException as e:

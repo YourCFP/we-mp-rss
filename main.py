@@ -5,8 +5,7 @@ import os
 if __name__ == '__main__':
     if cfg.args.init=="True":
         import init_sys as init
-        # init.init()
-        threading.Thread(target=init.init ,daemon=True).start()
+        init.init()
     if  cfg.args.job =="True":
         from jobs import start_job
         threading.Thread(target=start_job,daemon=True).start()

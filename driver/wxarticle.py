@@ -80,6 +80,7 @@ class WXArticleFetcher:
                 "biz": "",
                 }
             }
+        self.Close()
         self.controller.start_browser()    
         self.driver = self.controller.driver
         self.controller.open_url(url)
@@ -89,6 +90,10 @@ class WXArticleFetcher:
            
             driver.get(url)
             
+            body=driver.find_element(By.TAG_NAME,"body").text
+            if "该内容已被发布者删除" in body:
+                info["content"]="该内容已被发布者删除"
+                raise Exception("该内容已被发布者删除")
             # 等待关键元素加载
             wait.until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "#activity-detail"))
@@ -98,7 +103,6 @@ class WXArticleFetcher:
             title = driver.find_element(
                 By.CSS_SELECTOR, "#activity-name"
             ).text.strip()
-            
             author = driver.find_element(
                 By.CSS_SELECTOR, "#meta_content .rich_media_meta_text"
             ).text.strip()
@@ -127,6 +131,7 @@ class WXArticleFetcher:
         except Exception as e:
             # raise Exception(f"文章内容获取失败: {str(e)}")
             print(f"文章内容获取失败: {str(e)}")
+
         try:
             # 等待关键元素加载
             wait.until(
@@ -145,7 +150,8 @@ class WXArticleFetcher:
             }
         except Exception as e:
             # raise Exception(f"文章内容获取失败: {str(e)}")
-            print(f"获取公众号信息失败: {str(e)}")    
+            # print(f"获取公众号信息失败: {str(e)}")    
+            pass
        
         return info
     def Close(self):
