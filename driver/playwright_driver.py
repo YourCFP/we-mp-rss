@@ -42,7 +42,9 @@ class PlaywrightController:
     def is_async(self):
         try:
             # 尝试获取事件循环
-            loop = asyncio.get_running_loop()
+                # 设置合适的事件循环策略
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             return True
         except RuntimeError:
             # 如果没有正在运行的事件循环，则说明不是异步环境
@@ -54,14 +56,7 @@ class PlaywrightController:
                 headless = False
             if self.driver is None:
                     # 修复所有操作系统下的异步子进程问题
-                import asyncio
-                # 设置合适的事件循环策略
-                if sys.platform == "win32":
-                    # Windows系统使用ProactorEventLoop
-                    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-                else:
-                    # Linux/Mac系统使用默认策略
-                    asyncio.set_event_loop_policy(asyncio.DefaultEventLoopPolicy())
+                self.is_async()
                 self.driver = sync_playwright().start()
         
             # 根据浏览器名称选择浏览器类型

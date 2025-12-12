@@ -81,7 +81,82 @@ class Wx:
         except Exception as e:
             print(f"提取token时出错: {str(e)}")
             return None
-       
+    def switch_account(self, username: str = ""):
+        """切换账号功能
+        Args:
+            username: 目标账号的用户名，如果为空则切换到其他可用账号
+        """
+        print("开始切换账号...")
+        try:
+            self.Token(isClose=False)
+            if self._haslogin is False:
+                self.GetCode(Success)
+                time.sleep(60)
+                return False
+            time.sleep(1)
+            if not hasattr(self, 'controller') or not self.controller.page:
+                print_error("浏览器未启动，无法切换账号")
+                return False
+                
+            page = self.controller.page
+            
+            # 等待页面加载完成
+            page.wait_for_load_state("networkidle")
+            
+            # 点击账号信息区域打开账号面板
+            account_info = page.locator(".weui-desktop-account__info")
+            if account_info.count() > 0:
+                account_info.click()
+                time.sleep(1)
+                
+                # 等待账号面板显示
+                account_panel = page.locator(".account_box-panel")
+                if account_panel.count() > 0:
+                    # 查找切换账号按钮（更精确的选择器）
+                    switch_account_link = account_panel.locator("li.account_box-panel-item:has-text('切换账号') a")
+                    if switch_account_link.count() > 0:
+                        print_info("找到切换账号按钮，点击切换...")
+                        switch_account_link.click()
+                        time.sleep(3)
+                        
+                        try:
+                            # 查找可切换的账号（排除当前登录账号）
+                            accounts = page.locator(
+                                                ".switch-account-dialog .switch-account-dialog_section:has-text('公众号') .section-item:not(:has-text('当前登录')),"
+                                                ".switch-account-dialog .switch-account-dialog_section:has-text('服务号') .section-item:not(:has-text('当前登录'))"
+                                            )
+                            account_count = accounts.count()
+                            print(f"当前一共有{account_count}个可切换账号")
+                            import random
+                            if account_count > 0:
+                                # 点击第一个可切换的账号
+                                time.sleep(3)
+                                random_index = random.randint(0, account_count - 1)
+                                p=accounts.nth(random_index).locator("p")
+                                account_name=p.text_content()
+                                print(f"切换账号: {account_name}")
+                                p.click()
+                                # 等待页面加载并验证切换成功
+                                page.wait_for_load_state("networkidle", timeout=10000)
+                                 
+                                print_success("账号切换成功")
+                                self.Call_Success()
+                                return True
+                            else:
+                                print_warning("没有找到可切换的账号")
+                        except Exception as e:
+                            print_error(f"切换账号时发生错误: {str(e)}")
+                            return False
+                    else:
+                        print_warning("未找到切换账号按钮")
+                else:
+                    print_warning("账号面板未打开")
+            else:
+                print_warning("未找到账号信息区域")
+                
+        except Exception as e:
+            print_error(f"切换账号时发生错误: {str(e)}")
+            return False 
     def GetCode(self,CallBack=None,Notice=None):
         self.Notice=Notice
         if  self.check_lock():
@@ -116,13 +191,14 @@ class Wx:
         except Exception as e:
             raise Exception(f"浏览器关闭")  # 重新抛出异常以便外部捕获处理
     def HasLogin(self):
-        return self.HasLogin
+        with self._login_lock:
+            return self._haslogin
     def schedule_refresh(self):
         if self.refresh_interval <= 0:
             return
             
         with self._login_lock:
-            if not self.HasLogin or not hasattr(self, 'controller') or self.controller is None:
+            if not self._haslogin or not hasattr(self, 'controller') or self.controller is None:
                 return
                 
         try:
@@ -134,9 +210,9 @@ class Wx:
         except Exception as e:
             print_error(f"定时刷新任务失败: {str(e)}")
             # 不再抛出异常，避免无限循环
-    def Token(self, CallBack=None):
+    def Token(self, callback=None,isClose=True):
         try:
-            self.CallBack = CallBack
+            self.CallBack = callback
             if not getStatus():
                 print_warning("登录状态检查失败")
                 return None
@@ -175,7 +251,10 @@ class Wx:
             qrcode.wait_for(state="visible", timeout=self.wait_time * 1000)
             qrcode.click()
             time.sleep(2)
-            
+            hasLogin=page.locator("body:has-text('使用账号登录')")
+            if hasLogin.count()>0:
+                self._haslogin=False
+                return False
             return self.Call_Success()
         except ImportError as e:
             print_error(f"导入模块失败: {str(e)}")
@@ -185,7 +264,8 @@ class Wx:
             return None
         finally:
             # 不在这里清理，让Call_Success处理清理
-            self.controller.cleanup()
+            if isClose:
+                self.controller.cleanup()
             pass
     def isLock(self):             
         if self.isLock:
@@ -216,7 +296,7 @@ class Wx:
             self.set_lock()
             
             with self._login_lock:
-                self.HasLogin = False
+                self._haslogin = False
                 
             # 清理现有资源
             self.cleanup_resources()
@@ -271,7 +351,7 @@ class Wx:
            
             from .success import setStatus
             with self._login_lock:
-                self.HasLogin=True
+                self._haslogin=True
             setStatus(True)
             self.CallBack=CallBack
             self.Call_Success()
@@ -285,17 +365,17 @@ class Wx:
         finally:
             self.release_lock()
             # 只有在NeedExit为True且未登录成功时才清理资源
-            if NeedExit and 'controller' in locals() and not self.HasLogin:
+            if NeedExit and 'controller' in locals() and not self._haslogin:
                 self.controller.cleanup()
                 self.Clean()
         return self.SESSION
-    def format_token(self,cookies:any,token=""):
+    def format_token(self, cookies: list, token: str = ""):
         cookies_str=""
         for cookie in cookies:
             # print(f"{cookie['name']}={cookie['value']}")
             cookies_str+=f"{cookie['name']}={cookie['value']}; "
             if 'token' in cookie['name'].lower():
-                token= cookie['value']
+                token= token or cookie['value']
         # 计算 slave_sid cookie 有效时间
         cookie_expiry = expire(cookies)
         return{
@@ -319,9 +399,9 @@ class Wx:
         # print("\n获取到的Cookie:")
         self.SESSION=self.format_token(cookies,str(token))
         with self._login_lock:
-            self.HasLogin=False if self.SESSION["expiry"] is None else True
+            self._haslogin=False if self.SESSION["expiry"] is None else True
         # 登录成功后不立即清理二维码，保持浏览器运行
-        if  self.HasLogin:
+        if  self._haslogin:
             try:
             # 使用更健壮的选择器定位元素
                 self.ext_data = self._extract_wechat_data()
@@ -352,13 +432,13 @@ class Wx:
         
         # 使用更健壮的选择器，增加备选方案
         selectors = {
-            "wx_app_name": [".account-name", ".nickname", ".account_nickname"],
-            "wx_logo": [".account-avatar img", ".avatar img"],
-            "wx_read_yesterday": [".data-item:nth-child(1) .number", ".data-item:first-child .number", "[data-label='阅读'] .number"],
-            "wx_share_yesterday": [".data-item:nth-child(2) .number", ".data-item:nth-child(1) + .data-item .number", "[data-label='分享'] .number"], 
-            "wx_watch_yesterday": [".data-item:nth-child(3) .number", ".data-item:last-child .number", "[data-label='在看'] .number", ".data-item .number"],
-            "wx_yuan_count": [".original-count .number", "[data-label='原创'] .number"],
-            "wx_user_count": [".user-count .number", "[data-label='关注'] .number"]
+            "wx_app_name": [".weui-desktop_name", ".acount_box-nickname", ".account_box-panel-head__nickname"],
+            "wx_logo": [".weui-desktop-account__img", ".weui-desktop-account__thumb", ".account_box-panel-head__thumb"],
+            "wx_read_yesterday": [".weui-desktop-data-overview:nth-child(1) .weui-desktop-data-overview__desc span", ".weui-desktop-data-overview:first-child .weui-desktop-data-overview__desc span"],
+            "wx_share_yesterday": [".weui-desktop-data-overview:nth-child(2) .weui-desktop-data-overview__desc span", ".weui-desktop-data-overview:nth-child(1) + .weui-desktop-data-overview .weui-desktop-data-overview__desc span"], 
+            "wx_watch_yesterday": [".weui-desktop-data-overview:nth-child(3) .weui-desktop-data-overview__desc span", ".weui-desktop-data-overview:last-child .weui-desktop-data-overview__desc span"],
+            "wx_yuan_count": [".original_cnt .weui-desktop-user_sum span", ".weui-desktop-user_sum.original_cnt span"],
+            "wx_user_count": [".weui-desktop-user_sum:not(.original_cnt) span", ".weui-desktop-user_num .weui-desktop-user_sum span"]
         }
         
         for key, selector_list in selectors.items():
@@ -410,7 +490,7 @@ class Wx:
                 
             # 重置状态
             with self._login_lock:
-                self.HasLogin = False
+                self._haslogin = False
                 self.HasCode = False
                 
             print_info("资源清理完成")
@@ -425,8 +505,7 @@ class Wx:
                 self.controller.cleanup()
                 rel=True
         except Exception as e:
-            print("浏览器未启动")
-            # print(e)
+            print_warning("浏览器未启动或已关闭")
             pass
         return rel
     def Clean(self):
@@ -470,9 +549,6 @@ class Wx:
         except:
             return False
 
-def DoSuccess(cookies:any) -> dict:
-    data=WX_API.format_token(cookies)
-    Success(data)
 
 WX_API = Wx()
 def GetCode(CallBack:any=None,NeedExit=True):

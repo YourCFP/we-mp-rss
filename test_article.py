@@ -59,21 +59,19 @@ def testMd2Doc():
 
 
 
-def testToken():
-    from driver.auth import auth
-    auth()
-    # input("按任意键退出")
 def testCheckAuth():
     from driver.auth import auth
     input("按任意键退出")
 def testLogin():
     from driver.base import WX_API
     from driver.success import Success
-    rel=WX_API.Token(Success)
-    if rel==False:
-        de_url=WX_API.GetCode(Success)
-        print(de_url)
-        input("按任意键退出")
+    # de_url=WX_API.GetCode(Success)
+    WX_API.switch_account("gh_804eaba2350a")
+    # rel=WX_API.Token(Success)
+    # if rel==False:
+    #     de_url=WX_API.GetCode(Success)
+    #     print(de_url)
+    #     input("按任意键退出")
 def testNotice():
     from jobs.notice import sys_notice
     text="""
@@ -157,8 +155,7 @@ if __name__=="__main__":
     # testWeb()
     # testNotice()
     # testMd2Doc()
-    # testToken()
-    # testCheckAuth()
     testLogin()
+    # testCheckAuth()
     # testToken()  # 注释掉避免线程冲突
     # testMarkDown()

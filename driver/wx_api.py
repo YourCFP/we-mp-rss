@@ -6,9 +6,11 @@
 from ast import Call
 import os
 # import traceback
+import re
 import time
 import json
 import base64
+from urllib import response
 from attr import s
 import requests
 from typing import Optional, Dict, Any, Callable
@@ -41,7 +43,7 @@ class WeChatAPI:
         self.session = requests.Session()
         self.token = None
         self.cookies_dict=[]
-        self.cookies = {}
+        self.cookies:Optional[Dict[str,str]] = {}
         self.qr_code_path = "static/wx_qrcode.png"
         self.wx_login_url=f"{self.qr_code_path}"
         # 线程安全
@@ -414,7 +416,7 @@ class WeChatAPI:
             if not os.path.exists(self.qr_code_path):
                 return "not_exists"
             check_url=f"{self.base_url}/cgi-bin/scanloginqrcode"
-            self.fingerprint=self.cookies.get("fingerprint")
+            self.fingerprint=self.cookies.get("fingerprint") or self._generate_uuid()
             params = {
                 "action": "ask",
                 "fingerprint": self.fingerprint,
@@ -464,11 +466,12 @@ class WeChatAPI:
             self._clean_qr_code()
             from driver.cookies import expire
             # 调用成功回调
-            self._get_account_info()
-            logger.info("登录成功！")
-                
+            if self._get_account_info() is not  None:
+                logger.info("登录成功！")
+                return True
         except Exception as e:
             logger.error(f"处理登录失败: {str(e)}")
+        return False
     def _extract_login_info(self):
         """
         提取登录信息（token和cookies）
@@ -621,6 +624,7 @@ class WeChatAPI:
                             'cookies': self.cookies,
                             'cookies_str': self._format_cookies_string(),
                             'token': self.token,
+                            'fingerprint': self.fingerprint,
                             'wx_login_url': self.qr_code_path,
                             'expiry': expire(self.cookies_dict)
             }
@@ -632,6 +636,67 @@ class WeChatAPI:
         except Exception as e:
             logger.error(f"获取账号信息失败: {str(e)}")
             return None
+
+    def switch_account(self,username:str=""):
+        """切换微信公众号账号"""
+        self.login_with_token()
+        url = f"{self.base_url}/cgi-bin/switchacct?action=switch"
+        
+        headers = {
+            "accept": "*/*",
+            "accept-language": "zh-CN,zh;q=0.9",
+            "content-type": "application/x-www-form-urlencoded; charset=UTF-8",
+            "priority": "u=1, i",
+            "sec-ch-ua": "\"Not?A_Brand\";v=\"99\", \"Chromium\";v=\"130\"",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": "\"Windows\"",
+            "sec-fetch-dest": "empty",
+            "sec-fetch-mode": "cors",
+            "sec-fetch-site": "same-origin",
+            "x-requested-with": "XMLHttpRequest",
+        }
+        headers["Referer"]=f"{self.base_url}/cgi-bin/home?t=home/index&lang=zh_CN&token={self.token}"
+        params = {
+            "f": "json",
+            "username": username,
+            "fingerprint": self.fingerprint,
+            "token": self.token,
+            "lang": "zh_CN",
+            "ajax": "1"
+        }
+        
+        try:
+            response =  self.session.post(
+                url, 
+                headers=headers, 
+                data=params,
+                cookies={},
+                allow_redirects=True
+            )
+            
+            response.raise_for_status()  # 检查HTTP错误
+            
+            # 解析JSON响应
+            data = response.json()
+            print("切换账号响应:", data)
+            if data.get("base_resp").get("ret") == 0:
+                self._redirect()
+            return data
+            
+        except requests.exceptions.RequestException as e:
+            print(f"请求出错: {e}")
+            return None
+        except json.JSONDecodeError as e:
+            print(f"JSON解析出错: {e}")
+        return None
+    def _redirect(self):
+        url=f"https://mp.weixin.qq.com/cgi-bin/loginpage?url=/cgi-bin/home?t=home/index&lang=zh_CN&token={self.token}"
+        response=self.session.get(url)
+        response.raise_for_status()
+        self.cookies = requests.utils.dict_from_cookiejar(response.cookies) if response.cookies else {}
+        self.session.cookies.update(self.cookies)
+        self.token=self.cookies.get("token")
+        self._handle_login_success()
 
     def _get_account_list(self) -> Optional[Dict[str, Any]]:
         """
@@ -650,7 +715,7 @@ class WeChatAPI:
                 
             # 构建请求URL
             url = f"{self.base_url}/cgi-bin/switchacct"
-            self.fingerprint=self.cookies.get("fingerprint")
+            self.fingerprint=self.cookies.get("fingerprint") or self._generate_uuid()
             # 设置请求参数
             params = {
                 'action': 'get_acct_list',
@@ -704,7 +769,7 @@ class WeChatAPI:
         except Exception as e:
             logger.error(f"清理二维码文件失败: {str(e)}")
 
-    def login_with_token(self, token: str="", cookies: Optional[Dict[str, str]] = None) -> bool:
+    def login_with_token(self, token: str="", cookies:Any = None) -> bool:
         """
         使用token登录
         
@@ -737,8 +802,7 @@ class WeChatAPI:
                 if 'home'  in response.url:
                     self.is_logged_in = True
                     logger.info("Token登录成功")
-                    self._handle_login_success()
-                    return True
+                    return self._handle_login_success()
                 else:
                     logger.warning("Token登录失败")
                     return False

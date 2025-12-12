@@ -21,6 +21,7 @@ def set_token(data:any,ext_data:any=None):
         return
     wx_cfg.set("token", data.get("token", ""))
     wx_cfg.set("cookie", data.get("cookies_str", ""))
+    wx_cfg.set("fingerprint", data.get("fingerprint", ""))
     wx_cfg.set("expiry", data.get("expiry", {}))
     print_success(f"Token:{data.get('token')} \n到期时间:{data.get('expiry')['expiry_time']}\n")
     if ext_data is not None:

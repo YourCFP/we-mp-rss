@@ -2,7 +2,6 @@ import requests
 import json
 import re
 from core.models import Feed
-from driver.wx import DoSuccess
 from core.db import DB
 from core.models.feed import Feed
 from .cfg import cfg,wx_cfg
@@ -198,9 +197,6 @@ class WxGather:
         print(f"item end")
         _cookies=[{'name': c.name, 'value': c.value, 'domain': c.domain,'expiry':c.expires,'expires':c.expires} for c in self._cookies]
         _cookies.append({'name':'token','value':self.token})
-        if len(_cookies) > 0:   
-            # DoSuccess(_cookies)
-            pass
         if CallBack is not None:
             CallBack(item)
         pass

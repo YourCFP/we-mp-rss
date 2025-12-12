@@ -1,9 +1,17 @@
-from driver.base import WX_API
+import threading
+from driver.base import WX_InterFace
 import os
 from core.task import TaskScheduler
 from driver.success import Success
+
 def auth():
-    WX_API.Token(callback=Success)
+    def run_auth():
+        wx=WX_InterFace()
+        wx.Token(callback=Success)
+    
+    thread = threading.Thread(target=run_auth)
+    thread.start()
+    thread.join()  # 可选：等待完成
 if os.getenv('WE_RSS.AUTH',False):
     auth_task=TaskScheduler()
     if os.getenv('DEBUG',False):
