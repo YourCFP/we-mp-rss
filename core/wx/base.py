@@ -210,7 +210,7 @@ class WxGather:
             TaskQueue.clear_queue()
             threading.Thread(target=send_wx_code,args=(f"公众号平台登录失效,请重新登录",)).start()
             # send_wx_code(f"公众号平台登录失效,请重新登录")
-            raise Exception(error)
+            # raise Exception(error)
         # raise Exception(error)
 
     def Over(self,CallBack=None):

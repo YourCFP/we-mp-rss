@@ -56,7 +56,11 @@ class PlaywrightController:
                 headless = False
             if self.driver is None:
                     # 修复所有操作系统下的异步子进程问题
-                self.is_async()
+                # self.is_async()
+                if sys.platform == "win32" :
+                    # 设置事件循环策略为WindowsSelectorEventLoopPolicy
+                    # asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+                    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
                 self.driver = sync_playwright().start()
         
             # 根据浏览器名称选择浏览器类型

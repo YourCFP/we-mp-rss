@@ -86,7 +86,7 @@ class MpsAppMsg(WxGather):
                     super().Error("Invalid Session, stop at {}".format(str(begin)),code="Invalid Session")
                     break
                 if msg['base_resp']['ret'] != 0:
-                    super().Error("错误原因:{}:代码:{}".format(msg['base_resp']['err_msg'],msg['base_resp']['ret']),code="Invalid Session")
+                    super().Error("错误原因:{}:代码:{}".format(msg['base_resp']['err_msg'],msg['base_resp']['ret']),code=msg['base_resp']['err_msg'])
                     break    
                 # 如果返回的内容中为空则结束
                 if 'publish_page' not in msg:
