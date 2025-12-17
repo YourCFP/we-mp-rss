@@ -28,7 +28,7 @@ services:
       - PASSWORD=admin@123
       - WERSS_AUTH_WEB=True
       - WE_RSS.AUTH=True
-      - DINGDING_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=af7f99c32895f79d9d61c57181f164b77027102a22f3b205dc15e2984690025c
+      - DINGDING_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx
       - WE_RSS.AUTH=True
     volumes:
       - ./data:/app/data
