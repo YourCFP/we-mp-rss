@@ -10,7 +10,7 @@ from core.models.feed import Feed
 from core.models.tags import Tags
 from apis.base import format_search_kw
 from core.lax.template_parser import TemplateParser
-
+from views.config import base
 # 创建路由器
 router = APIRouter(tags=["文章"])
 
@@ -114,14 +114,23 @@ async def articles_view(
         tag_options = [{"id": tag.id, "name": tag.name} for tag in tags]
         
         # 获取热门公众号（文章数量最多的前10个）
+        from sqlalchemy import func
         popular_mps = session.query(
             Feed.id, Feed.mp_name, Feed.mp_cover,
-            session.query(Article).filter(Article.mp_id == Feed.id, Article.status == 1).count().label('article_count')
+            func.count(Article.id).label('article_count')
+        ).outerjoin(
+            Article, Article.mp_id == Feed.id
         ).filter(
-            session.query(Article).filter(Article.mp_id == Feed.id, Article.status == 1).count() > 0
-        ).order_by('article_count DESC').limit(10).all()
+            Article.status == 1
+        ).group_by(
+            Feed.id, Feed.mp_name, Feed.mp_cover
+        ).having(
+            func.count(Article.id) > 0
+        ).order_by(
+            func.count(Article.id).desc()
+        ).limit(10).all()
         
-        mp_options = [{"id": mp.id, "name": mp.mp_name} for mp, _, _, _ in popular_mps]
+        mp_options = [{"id": str(feed_id), "name": mp_name} for feed_id, mp_name, _, _ in popular_mps]
         
         # 计算分页信息
         total_pages = (total + limit - 1) // limit
@@ -135,11 +144,11 @@ async def articles_view(
         ]
         
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "simple_articles.html")
+        template_path = base.articles_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "articles": article_list,
             "current_page": page,
@@ -166,11 +175,11 @@ async def articles_view(
     except Exception as e:
         print(f"获取文章列表错误: {str(e)}")
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "simple_articles.html")
+        template_path=base.articles_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "error": f"加载数据时出现错误: {str(e)}",
             "breadcrumb": [{"name": "首页", "url": "/views/home"}, {"name": "文章列表", "url": None}]
@@ -247,11 +256,11 @@ async def article_detail_view(
         ]
         
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "simple_article_detail.html")
+        template_path=base.article_detail_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "article": article_data,
             "related_articles": related_list,
@@ -265,11 +274,11 @@ async def article_detail_view(
     except Exception as e:
         print(f"获取文章详情错误: {str(e)}")
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "simple_article_detail.html")
+        template_path = base.article_detail_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "error": f"加载文章时出现错误: {str(e)}",
             "breadcrumb": [{"name": "首页", "url": "/views/home"}, {"name": "文章列表", "url": "/views/articles"}]

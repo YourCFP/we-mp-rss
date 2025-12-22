@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from fastapi.responses import HTMLResponse
 from typing import Optional
 import os
-
+import views.config as config
 # 创建路由器
 router = APIRouter(prefix="/views", tags=["网页预览"])
 

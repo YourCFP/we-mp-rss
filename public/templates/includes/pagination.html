@@ -1,0 +1,15 @@
+{% if total_pages > 1 %}
+<div class="text-center" style="display: flex; justify-content: center; align-items: center; gap: 1rem;">
+    {% if has_prev %}
+    <a href="{{base_url}}?page={{=current_page - 1}}&limit={{limit}}" class="btn btn-secondary">« 上一页</a>
+    {% endif %}
+    
+    <span style="color: #6c757d;">
+        第 {{current_page}} 页，共 {{total_pages}} 页 (总计 {{total_items}} {{item_name}})
+    </span>
+    
+    {% if has_next %}
+    <a href="{{base_url}}?page={{=current_page + 1}}&limit={{limit}}" class="btn btn-secondary">下一页 »</a>
+    {% endif %}
+</div>
+{% endif %}

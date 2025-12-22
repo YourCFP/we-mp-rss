@@ -10,7 +10,7 @@ from core.models.tags import Tags
 from core.models.feed import Feed
 from core.models.article import Article
 from core.lax.template_parser import TemplateParser
-
+from views.config import base
 # 创建路由器
 router = APIRouter(tags=["首页"])
 
@@ -80,12 +80,12 @@ async def home_view(
         ]
         
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "simple_home.html")
+        template_path = base.home_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
         # 使用模板引擎渲染
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "tags": tag_list,
             "current_page": page,
@@ -102,11 +102,11 @@ async def home_view(
     except Exception as e:
         print(f"获取首页数据错误: {str(e)}")
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "simple_home.html")
+        template_path = base.home_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "error": f"加载数据时出现错误: {str(e)}",
             "breadcrumb": [{"name": "首页", "url": "/views/home"}]
@@ -205,11 +205,11 @@ async def tag_detail_view(
         ]
         
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "tag_detail.html")
+        template_path = base.articles_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "tag": tag_data,
             "articles": articles,
@@ -229,11 +229,11 @@ async def tag_detail_view(
     except Exception as e:
         print(f"获取标签详情错误: {str(e)}")
         # 读取模板文件
-        template_path = os.path.join(os.path.dirname(__file__), "tag_detail.html")
+        template_path = base.tag_template
         with open(template_path, 'r', encoding='utf-8') as f:
             template_content = f.read()
         
-        parser = TemplateParser(template_content)
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
         html_content = parser.render({
             "error": f"加载数据时出现错误: {str(e)}",
             "breadcrumb": [{"name": "首页", "url": "/views/home"}]

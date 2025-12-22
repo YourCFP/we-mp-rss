@@ -1,4 +1,5 @@
 import re
+import os
 from typing import Any, Dict, List, Union
 # """
 # 模板引擎使用示例
@@ -11,11 +12,12 @@ from typing import Any, Dict, List, Union
 class TemplateParser:
     """A lightweight template engine supporting variables, conditions and loops."""
     
-    def __init__(self, template: str):
+    def __init__(self, template: str, template_dir: str = None):
         """Initialize the template parser with a template string."""
         self.template = template
         self.compiled = None
         self.custom_functions = {}
+        self.template_dir = template_dir  # Template directory for include functionality
         
     def register_function(self, name: str, func: callable) -> None:
         """
@@ -38,12 +40,15 @@ class TemplateParser:
 
     def compile_template(self) -> None:
         """Compile the template into an intermediate representation."""
+        # First process include directives
+        processed_template = self._process_includes(self.template)
+        
         # Split template into static parts and control blocks
         pattern = re.compile(
             r'(\{\%.*?\%\})|'  # control blocks {% ... %}
             r'(\{\{.*?\}\})'    # variables {{ ... }}
         )
-        self.compiled = pattern.split(self.template)
+        self.compiled = pattern.split(processed_template)
         
     def render(self, context: Dict[str, Any]) -> str:
         """
@@ -89,14 +94,7 @@ class TemplateParser:
                     try:
                         # Evaluate the expression (after =)
                         expr = var_expr[1:]
-                        if not self._is_safe_expression(expr):
-                            raise ValueError("Potentially dangerous expression detected")
-                            
-                        # Create safe evaluation environment
-                        safe_globals = self._get_safe_globals()
-                        eval_globals = {**safe_globals, **self.custom_functions}
-                        
-                        result = eval(expr, eval_globals, context)
+                        result = self._evaluate_calculation(expr, context)
                         output.append(str(result))
                     except Exception as e:
                         output.append(f'[Error: {str(e)}]')
@@ -122,6 +120,12 @@ class TemplateParser:
             # Handle control blocks {% ... %}
             elif part.startswith('{%') and part.endswith('%}'):
                 block = part[2:-2].strip()
+                
+                # Handle include directive (processed during compile, but keep for safety)
+                if block.startswith('include '):
+                    # Include should have been processed during compilation
+                    i += 1
+                    continue
                 
                 # Handle if condition
                 if block.startswith('if '):
@@ -265,16 +269,10 @@ class TemplateParser:
                                 # print(f"DEBUG - Evaluating variable: {var_expr}")  # Debug
                             
                                 if var_expr.startswith('='):
-                                    # Handle eval expressions
+                                    # Handle eval expressions with enhanced calculation
                                     try:
                                         expr = var_expr[1:]
-                                        if not self._is_safe_expression(expr):
-                                            raise ValueError("Potentially dangerous expression detected")
-                                        
-                                        safe_globals = self._get_safe_globals()
-                                        eval_globals = {**safe_globals, **self.custom_functions}
-                                    
-                                        result = eval(expr, eval_globals, loop_context)
+                                        result = self._evaluate_calculation(expr, loop_context)
                                         value = str(result)
                                     except Exception as e:
                                         value = f'[Error: {str(e)}]'
@@ -353,7 +351,11 @@ class TemplateParser:
             'min': min,
             'max': max,
             'abs': abs,
-            'round': round
+            'round': round,
+            'pow': pow,
+            'sqrt': lambda x: x ** 0.5,
+            'ceil': lambda x: int(x) + (1 if x > int(x) else 0),
+            'floor': int
         }
         return safe_builtins
 
@@ -537,9 +539,68 @@ class TemplateParser:
         except Exception:
             return []
             
+    def _process_includes(self, template: str) -> str:
+        """Process {% include 'filename' %} directives."""
+        include_pattern = re.compile(r'\{\%\s*include\s+[\'"]([^\'"]+)[\'"]\s*\%\}')
+        
+        def replace_include(match):
+            filename = match.group(1)
+            content = self._load_include_file(filename)
+            return content
+        
+        # Recursively process includes
+        while include_pattern.search(template):
+            template = include_pattern.sub(replace_include, template)
+        
+        return template
+    
+    def _load_include_file(self, filename: str) -> str:
+        """Load content from an included template file."""
+        if self.template_dir:
+            file_path = os.path.join(self.template_dir, filename)
+        else:
+            file_path = filename
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            # Recursively process includes in the included file
+            included_parser = TemplateParser(content, self.template_dir)
+            return included_parser._process_includes(content)
+        except FileNotFoundError:
+            return f"[Error: Include file '{filename}' not found]"
+        except Exception as e:
+            return f"[Error: Failed to include '{filename}': {str(e)}]"
+    
+    def _evaluate_calculation(self, expr: str, context: Dict[str, Any]) -> Any:
+        """Evaluate mathematical expressions with enhanced safety."""
+        if not self._is_safe_expression(expr):
+            raise ValueError(f"Potentially dangerous expression: {expr}")
+        
+        # Enhanced safe globals with math functions
+        safe_globals = self._get_safe_globals()
+        safe_globals.update({
+            'pow': pow,
+            'sqrt': lambda x: x ** 0.5,
+            'ceil': lambda x: int(x) + (1 if x > int(x) else 0),
+            'floor': int,
+            'abs': abs,
+            'round': round,
+            'min': min,
+            'max': max,
+            'sum': sum
+        })
+        
+        eval_globals = {**safe_globals, **self.custom_functions}
+        
+        try:
+            return eval(expr, eval_globals, context)
+        except Exception as e:
+            return f"[Calculation Error: {str(e)}]"
+
     def _render_parts(self, parts: List[Union[str, None]], context: Dict[str, Any]) -> str:
         """Render a list of template parts with the given context."""
-        temp_parser = TemplateParser('')
+        temp_parser = TemplateParser('', self.template_dir)
         temp_parser.compiled = parts
         return temp_parser.render(context)
 
@@ -607,6 +668,73 @@ if __name__ == '__main__':
     {% endif %}
     """
     
+    # Include 和数学计算示例
+    print("\n=== Include 和数学计算示例 ===")
+    
+    # 创建示例模板文件
+    os.makedirs('templates', exist_ok=True)
+    with open('templates/header.html', 'w', encoding='utf-8') as f:
+        f.write("""<header>
+    <h1>{{ site_title }}</h1>
+    <nav>
+        <a href="/">首页</a> | 
+        <a href="/about">关于</a>
+    </nav>
+</header>""")
+    
+    with open('templates/footer.html', 'w', encoding='utf-8') as f:
+        f.write("""<footer>
+    <p>&copy; {{ year }} {{ company_name }}</p>
+    <p>页面生成时间: {{= current_time() }}</p>
+</footer>""")
+    
+    # 使用 include 和数学计算的模板
+    include_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>{{ page_title }}</title>
+    </head>
+    <body>
+        {% include 'header.html' %}
+        
+        <main>
+            <h2>{{ page_title }}</h2>
+            
+            <h3>数学计算示例:</h3>
+            <ul>
+                <li>基础运算: {{= 10 + 5 * 2 }}</li>
+                <li>幂运算: {{= pow(2, 8) }}</li>
+                <li>平方根: {{= sqrt(16) }}</li>
+                <li>向上取整: {{= ceil(3.2) }}</li>
+                <li>向下取整: {{= floor(3.8) }}</li>
+                <li>绝对值: {{= abs(-5) }}</li>
+                <li>四舍五入: {{= round(3.14159, 2) }}</li>
+            </ul>
+            
+            <h3>复杂计算:</h3>
+            <p>圆的面积 (半径=5): {{= 3.14159 * pow(5, 2) }}</p>
+            <p>商品价格计算: 
+                原价: {{ price }}元, 
+                折扣: {{ discount }}%, 
+                最终价格: {{= price * (1 - discount/100) }}元
+            </p>
+            
+            <h3>条件计算:</h3>
+            {% if score >= 90 %}
+                <p>优秀成绩: {{ score }}分</p>
+            {% elif score >= 60 %}
+                <p>及格成绩: {{ score }}分</p>
+            {% else %}
+                <p>需要努力: {{ score }}分</p>
+            {% endif %}
+        </main>
+        
+        {% include 'footer.html' %}
+    </body>
+    </html>
+    """
+    
     # 定义自定义函数
     def greet(name):
         return f"Hello, {name}!"
@@ -619,6 +747,10 @@ if __name__ == '__main__':
         
     def is_premium_user(user):
         return user.get('membership') == 'premium'
+    
+    def current_time():
+        from datetime import datetime
+        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
     # 创建解析器并注册函数
     func_parser = TemplateParser(func_template)
@@ -641,3 +773,26 @@ if __name__ == '__main__':
     # 渲染并打印结果
     func_result = func_parser.render(func_context)
     print(func_result)
+    
+    # 创建带模板目录的解析器用于 include 功能
+    include_parser = TemplateParser(include_template, template_dir='templates')
+    include_parser.register_function('current_time', current_time)
+    
+    include_context = {
+        'page_title': 'Include 和数学计算演示',
+        'site_title': '我的网站',
+        'year': '2024',
+        'company_name': '示例公司',
+        'price': 100,
+        'discount': 20,
+        'score': 85
+    }
+    
+    include_result = include_parser.render(include_context)
+    print("\n=== Include 模板渲染结果 ===")
+    print(include_result)
+    
+    # 清理创建的示例文件
+    import shutil
+    if os.path.exists('templates'):
+        shutil.rmtree('templates')
