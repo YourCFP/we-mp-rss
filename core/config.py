@@ -169,7 +169,8 @@ class Config:
             else:
                 return val
         except (KeyError, TypeError):
-            print_warning("Key {} not found in configuration".format(key))
+            # print_warning("Key {} not found in configuration".format(key))
+            pass
         return default 
 
 cfg=Config()

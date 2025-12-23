@@ -1,0 +1,146 @@
+from fastapi import APIRouter, Request, Depends, Query, HTTPException
+from fastapi.responses import HTMLResponse
+from typing import Optional
+import os
+import json
+from datetime import datetime
+
+from core.db import DB
+from core.models.tags import Tags
+from core.models.feed import Feed
+from core.models.article import Article
+from core.lax.template_parser import TemplateParser
+from views.config import base
+from driver.wxarticle import Web
+from core.cache import cache_view, clear_cache_pattern
+# 创建路由器
+router = APIRouter(tags=["标签"])
+
+@router.get("/tag/{tag_id}", response_class=HTMLResponse, summary="标签详情页")
+@cache_view("tag_detail", ttl=2400)  # 缓存40分钟
+async def tag_detail_view(
+    request: Request,
+    tag_id: str,
+    page: int = Query(1, ge=1, description="页码"),
+    limit: int = Query(20, ge=1, le=100, description="每页文章数量")
+):
+    """
+    显示标签详情和关联的文章列表
+    """
+    session = DB.get_session()
+    try:
+        # 查询标签信息
+        tag = session.query(Tags).filter(Tags.id == tag_id, Tags.status == 1).first()
+        if not tag:
+            raise HTTPException(status_code=404, detail="标签不存在")
+        
+        # 解析mps_id JSON
+        mps_ids = []
+        if tag.mps_id:
+            try:
+                mps_data = json.loads(tag.mps_id)
+                mps_ids = [str(mp['id']) for mp in mps_data] if isinstance(mps_data, list) else []
+            except (json.JSONDecodeError, TypeError):
+                mps_ids = []
+        
+        # 获取关联的公众号信息
+        mps_info = []
+        if mps_ids:
+            mps_info = session.query(Feed).filter(Feed.id.in_(mps_ids)).all()
+        
+        # 查询文章总数
+        total = 0
+        if mps_ids:
+            total = session.query(Article).filter(
+                Article.mp_id.in_(mps_ids),
+                Article.status == 1
+            ).count()
+        
+        # 计算偏移量
+        offset = (page - 1) * limit
+        
+        # 查询文章列表
+        articles = []
+        if mps_ids:
+            articles_query = session.query(Article, Feed).join(
+                Feed, Article.mp_id == Feed.id
+            ).filter(
+                Article.mp_id.in_(mps_ids),
+                Article.status == 1
+            ).order_by(Article.publish_time.desc()).offset(offset).limit(limit).all()
+            
+            for article, feed in articles_query:
+                article_data = {
+                    "id": article.id,
+                    "title": article.title,
+                    "description": article.description or Web.get_description(article.content),
+                    "pic_url": Web.get_image_url(article.pic_url),
+                    "mp_cover": Web.get_image_url(feed.mp_cover) if feed else "",
+                    "url": article.url,
+                    "publish_time": datetime.fromtimestamp(article.publish_time).strftime('%Y-%m-%d %H:%M') if article.publish_time else "",
+                    "mp_name": feed.mp_name if feed else "未知公众号",
+                    "mp_id": article.mp_id
+                }
+                articles.append(article_data)
+        
+        # 处理标签数据
+        tag_data = {
+            "id": tag.id,
+            "name": tag.name,
+            "cover":tag.cover,
+            "intro": tag.intro,
+            "mp_count": len(mps_ids),
+            "article_count": total,
+            "sync_time": datetime.fromtimestamp(tag.sync_time).strftime('%Y-%m-%d %H:%M') if tag.sync_time else "未同步",
+            "mps": [{"id": mp.id, "name": mp.mp_name, "cover": Web.get_image_url(mp.mp_cover)} for mp in mps_info]
+        }
+        
+        # 计算分页信息
+        total_pages = (total + limit - 1) // limit
+        has_prev = page > 1
+        has_next = page < total_pages
+        
+        # 构建面包屑
+        breadcrumb = [
+            {"name": "首页", "url": "/views/home"},
+            {"name": tag.name, "url": None}
+        ]
+        
+        # 读取模板文件
+        template_path = base.articles_template
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_content = f.read()
+        
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
+        html_content = parser.render({
+            "tag": tag_data,
+            "articles": articles,
+            "current_page": page,
+            "total_pages": total_pages,
+            "total_items": total,
+            "limit": limit,
+            "has_prev": has_prev,
+            "has_next": has_next,
+            "breadcrumb": breadcrumb
+        })
+        
+        return HTMLResponse(content=html_content)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"获取标签详情错误: {str(e)}")
+        # 读取模板文件
+        template_path = base.tag_template
+        with open(template_path, 'r', encoding='utf-8') as f:
+            template_content = f.read()
+        
+        parser = TemplateParser(template_content, template_dir=base.public_dir)
+        html_content = parser.render({
+            "error": f"加载数据时出现错误: {str(e)}",
+            "breadcrumb": [{"name": "首页", "url": "/views/home"}]
+        })
+        
+        return HTMLResponse(content=html_content)
+    finally:
+        session.close()
