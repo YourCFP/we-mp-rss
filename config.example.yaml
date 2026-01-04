@@ -13,9 +13,9 @@ server:
    #代码修改自动重启服务，默认为False
    auto_reload: ${AUTO_RELOAD:-True}
    #最大线程数 默认2个线程，不建议超过4个线程
-   threads: ${THREADS:-2}
+   threads: ${THREADS:-1}
    #通过web方式授权二维码 默认False 
-   auth_web: ${WERSS_AUTH_WEB:-False}
+   auth_web: ${WERSS_AUTH_WEB:-True}
 
 
 #数据库连接 例如db:  mysql+pymysql://<username>:<password>@<host>/we-rss?charset=utf8mb4
@@ -99,7 +99,7 @@ gather:
   #采集模式，web模式（可采集到发布链接)，api模式（可采集临时链接），app模式（采集最新消息）
   model: ${GATHER.MODEL:-web}
   #是否自动检查未采集文章内容，默认False
-  content_auto_check: ${GATHER.CONTENT_AUTO_CHECK:-False}
+  content_auto_check: ${GATHER.CONTENT_AUTO_CHECK:-True}
   #自动检查未采集文章内容的时间间隔 单位秒默认59分钟 允许值 1-59分钟之间 默认59分钟
   content_auto_interval: ${GATHER.CONTENT_AUTO_INTERVAL:-59}
   #内容修正模式，默认web 允许值 web、api
@@ -114,6 +114,11 @@ safe:
     hide_config: "${SAFE_HIDE_CONFIG:-db,secret,token,notice.wechat,notice.feishu,notice.dingding}"
     # 授权加密KEY
     lic_key: "${SAFE_LIC_KEY:-RACHELOS}"
+# 微信账号配置
+wechat:
+  # 允许切换的账号ID列表，为空表示允许所有账号，用逗号分隔
+  # 例如: "account1,account2,account3" 或留空 ""
+  allowed_accounts: "${WECHAT_ALLOWED_ACCOUNTS:-}"
 log:
   #日志文件路径，默认为空字符串，表示不输出到文件。如果要输出到文件，可以指定一个路径如：/var/log/we-mp-rss.log 如果为空就不纪录
    file: ${LOG_FILE:-}

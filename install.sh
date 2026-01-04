@@ -1,6 +1,6 @@
 #!/bin/bash
 plantform="$(uname -m)"
-PLANT_PATH=${PLANT_PATH:-/app/data/}
+PLANT_PATH=${PLANT_PATH:-/app/env/}
 plant=$PLANT_PATH_$plantform
 python3 -m venv $plant
 source $plant/bin/activate

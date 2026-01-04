@@ -157,13 +157,15 @@ def testJob():
 def test_feed_and_articles_template():
         from core.lax import TemplateParser
         """Test feed and articles template."""
-        template = """{% if feed is defined %}{
- "feed": "{{ feed.mp_name.replace("\\n","") }}",
+        template = """{% if feed is defined %}
+        {
+ "feed": "{{ feed.mp_name }}",
  "articles": [
 {% for article in articles %}{"title": "{{ article.title }}", "pub_date": "{{ article.publish_time }}"}{% if not loop.last %},{% endif %}
 {% endfor %}
  ]
-}"""
+}
+{{ endif }}"""
         parser = TemplateParser(template)
         context = {
             "feed": {"mp_name": "Test \nFeed"},
@@ -172,7 +174,7 @@ def test_feed_and_articles_template():
                 {"title": "Article 2", "publish_time": "2025-10-25"}
             ]
         }
-        result = parser.render(context)
+        result = parser.render(context).replace("\n", "")
         print(result)
 if __name__=="__main__":
     # import asyncio
@@ -185,8 +187,8 @@ if __name__=="__main__":
     # testWeb()
     # testNotice()
     # testMd2Doc()
-    # testLogin()
-    test_feed_and_articles_template()
+    testLogin()
+    # test_feed_and_articles_template()
     # testJob()
     # test_send_wx_code()
     # testCheckAuth()

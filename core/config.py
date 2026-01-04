@@ -102,10 +102,6 @@ class Config:
                     return data
             return data
     def get_config(self):
-        # 如果有缓存，直接返回缓存
-        if self._config_cache is not None:
-            return self._config_cache
-            
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 content = f.read()
@@ -133,8 +129,6 @@ class Config:
             # sys.exit(1)
     def reload(self):
         self.config=self.get_config()
-         # 更新缓存
-        self._config_cache = self._config
     def set(self,key,default:any=None):
         self.config[key] = default
         self.save_config()

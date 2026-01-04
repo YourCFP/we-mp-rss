@@ -29,7 +29,7 @@ if str(os.getenv('WE_RSS.AUTH',False))=="True":
     auth_task.clear_all_jobs()
     print("是否开启调试模式:",str(os.getenv('DEBUG',False)))
     if str(os.getenv('DEBUG',False))=="True":
-        auth_task.add_cron_job(auth, "*/1 * * * *",tag="授权定时更新")
+        auth_task.add_cron_job(auth, "*/5 * * * *",tag="授权定时更新")
     else:
-        auth_task.add_cron_job(auth, "0 */1 * * *",tag="授权定时更新")
+        auth_task.add_cron_job(auth, "0 0 */1 * *",tag="授权定时更新")
     auth_task.start()

@@ -27,7 +27,7 @@ def parseTemplate(template:str="", data:dict=None):
         {% endif %}
         """
     parser4 = TemplateParser(template)
-    result4 = parser4.render(data)
+    result4 = parser4.render(data).replace("\n", "")
     return result4
 if __name__ == "__main__":
     # 示例4: 使用Feed和Article模型数据

@@ -163,6 +163,48 @@ class TemplateParser:
                     i += 1
                     continue
                 
+                # Handle set variable
+                if block.startswith('set '):
+                    # Parse: set variable_name = expression
+                    set_content = block[4:].strip()
+                    if '=' in set_content:
+                        var_name, value_expr = set_content.split('=', 1)
+                        var_name = var_name.strip()
+                        value_expr = value_expr.strip()
+                        
+                        # Evaluate the value expression
+                        try:
+                            if value_expr.startswith('='):
+                                value_expr = value_expr[1:]
+                            value = self._evaluate_calculation(value_expr, context)
+                            # Store in context for future use
+                            context[var_name] = value
+                        except Exception as e:
+                            context[var_name] = f"[Set Error: {str(e)}]"
+                    i += 1
+                    continue
+                
+                # Handle let variable
+                if block.startswith('let '):
+                    # Parse: let variable_name = expression
+                    let_content = block[4:].strip()
+                    if '=' in let_content:
+                        var_name, value_expr = let_content.split('=', 1)
+                        var_name = var_name.strip()
+                        value_expr = value_expr.strip()
+                        
+                        # Evaluate the value expression
+                        try:
+                            if value_expr.startswith('='):
+                                value_expr = value_expr[1:]
+                            value = self._evaluate_calculation(value_expr, context)
+                            # Store in context for current scope
+                            context[var_name] = value
+                        except Exception as e:
+                            context[var_name] = f"[Let Error: {str(e)}]"
+                    i += 1
+                    continue
+                
                 # Handle if condition
                 if block.startswith('if '):
                     condition = block[3:].strip()
@@ -266,6 +308,54 @@ class TemplateParser:
                             if part is None:
                                 j += 1
                                 continue
+                            
+                            # Handle set/let statements inside for loop
+                            if (isinstance(part, str) and 
+                                part.startswith('{%') and 
+                                part.endswith('%}')):
+                                block = part[2:-2].strip()
+                                
+                                # Handle set variable
+                                if block.startswith('set '):
+                                    set_content = block[4:].strip()
+                                    if '=' in set_content:
+                                        var_name, value_expr = set_content.split('=', 1)
+                                        var_name = var_name.strip()
+                                        value_expr = value_expr.strip()
+                                        
+                                        # Evaluate value expression
+                                        try:
+                                            if value_expr.startswith('='):
+                                                value_expr = value_expr[1:]
+                                            value = self._evaluate_calculation(value_expr, loop_context)
+                                            # Store in loop context
+                                            loop_context[var_name] = value
+                                        except Exception as e:
+                                            loop_context[var_name] = f"[Set Error: {str(e)}]"
+                                    
+                                    j += 1
+                                    continue
+                                
+                                # Handle let variable  
+                                elif block.startswith('let '):
+                                    let_content = block[4:].strip()
+                                    if '=' in let_content:
+                                        var_name, value_expr = let_content.split('=', 1)
+                                        var_name = var_name.strip()
+                                        value_expr = value_expr.strip()
+                                        
+                                        # Evaluate value expression
+                                        try:
+                                            if value_expr.startswith('='):
+                                                value_expr = value_expr[1:]
+                                            value = self._evaluate_calculation(value_expr, loop_context)
+                                            # Store in loop context
+                                            loop_context[var_name] = value
+                                        except Exception as e:
+                                            loop_context[var_name] = f"[Let Error: {str(e)}]"
+                                    
+                                    j += 1
+                                    continue
                             
                             # Handle if conditions inside for loop
                             if (isinstance(part, str) and 
@@ -407,10 +497,286 @@ class TemplateParser:
     
     def _get_safe_globals(self) -> Dict[str, Any]:
         """Return a dictionary of safe builtins for eval/exec."""
+        # 字符串操作函数
+        def safe_upper(s):
+            return str(s).upper() if s else ""
+        
+        def safe_lower(s):
+            return str(s).lower() if s else ""
+        
+        def safe_title(s):
+            return str(s).title() if s else ""
+        
+        def safe_capitalize(s):
+            return str(s).capitalize() if s else ""
+        
+        def safe_strip(s):
+            return str(s).strip() if s else ""
+        
+        def safe_lstrip(s):
+            return str(s).lstrip() if s else ""
+        
+        def safe_rstrip(s):
+            return str(s).rstrip() if s else ""
+        
+        def safe_split(s, sep=None, maxsplit=-1):
+            return str(s).split(sep, maxsplit) if s else []
+        
+        def safe_join(sep, iterable):
+            try:
+                return str(sep).join(str(item) for item in iterable)
+            except:
+                return ""
+        
+        def safe_replace(s, old, new):
+            return str(s).replace(str(old), str(new)) if s else ""
+        
+        def safe_startswith(s, prefix):
+            return str(s).startswith(str(prefix)) if s else False
+        
+        def safe_endswith(s, suffix):
+            return str(s).endswith(str(suffix)) if s else False
+        
+        def safe_contains(s, sub):
+            return str(sub) in str(s) if s else False
+        
+        def safe_length(s):
+            try:
+                return len(s) if s is not None else 0
+            except:
+                return 0
+        
+        def safe_slice(s, start, end=None):
+            try:
+                if end is None:
+                    return str(s)[start:]
+                return str(s)[start:end]
+            except:
+                return "" if s else ""
+        
+        # 列表/数组操作函数
+        def safe_first(iterable):
+            try:
+                return iterable[0] if iterable else None
+            except:
+                return None
+        
+        def safe_last(iterable):
+            try:
+                return iterable[-1] if iterable else None
+            except:
+                return None
+        
+        def safe_rest(iterable):
+            try:
+                return iterable[1:] if iterable else []
+            except:
+                return []
+        
+        def safe_take(iterable, n):
+            try:
+                return iterable[:n] if iterable else []
+            except:
+                return []
+        
+        def safe_reverse(iterable):
+            try:
+                return list(reversed(iterable)) if iterable else []
+            except:
+                return []
+        
+        def safe_sort(iterable, key=None, reverse=False):
+            try:
+                return sorted(iterable, key=key, reverse=reverse) if iterable else []
+            except:
+                return []
+        
+        def safe_unique(iterable):
+            try:
+                return list(dict.fromkeys(iterable)) if iterable else []
+            except:
+                return []
+        
+        def safe_concat(*lists):
+            try:
+                result = []
+                for lst in lists:
+                    if lst:
+                        result.extend(lst)
+                return result
+            except:
+                return []
+        
+        # 类型转换和检查函数
+        def safe_to_string(value):
+            return str(value) if value is not None else ""
+        
+        def safe_to_int(value, default=0):
+            try:
+                return int(value)
+            except:
+                return default
+        
+        def safe_to_float(value, default=0.0):
+            try:
+                return float(value)
+            except:
+                return default
+        
+        def safe_to_list(value):
+            if value is None:
+                return []
+            elif isinstance(value, (list, tuple)):
+                return list(value)
+            elif isinstance(value, dict):
+                return list(value.values())
+            else:
+                return [value]
+        
+        def safe_is_empty(value):
+            if value is None:
+                return True
+            elif isinstance(value, (list, tuple, dict, str)):
+                return len(value) == 0
+            else:
+                return False
+        
+        def safe_is_not_empty(value):
+            return not safe_is_empty(value)
+        
+        def safe_is_numeric(value):
+            try:
+                float(value)
+                return True
+            except:
+                return False
+        
+        def safe_type_of(value):
+            return type(value).__name__
+        
+        # 数学扩展函数
+        def safe_mean(iterable):
+            try:
+                if not iterable:
+                    return 0
+                return sum(iterable) / len(iterable)
+            except:
+                return 0
+        
+        def safe_median(iterable):
+            try:
+                if not iterable:
+                    return 0
+                sorted_list = sorted(iterable)
+                n = len(sorted_list)
+                if n % 2 == 0:
+                    return (sorted_list[n//2-1] + sorted_list[n//2]) / 2
+                else:
+                    return sorted_list[n//2]
+            except:
+                return 0
+        
+        def safe_range(start, stop=None, step=1):
+            try:
+                if stop is None:
+                    return list(range(start))
+                return list(range(start, stop, step))
+            except:
+                return []
+        
+        # 日期时间函数
+        def safe_now(format="%Y-%m-%d %H:%M:%S"):
+            try:
+                from datetime import datetime
+                return datetime.now().strftime(format)
+            except:
+                return ""
+        
+        def safe_today(format="%Y-%m-%d"):
+            try:
+                from datetime import datetime
+                return datetime.now().strftime(format)
+            except:
+                return ""
+        
+        def safe_year():
+            try:
+                from datetime import datetime
+                return datetime.now().year
+            except:
+                return 0
+        
+        def safe_month():
+            try:
+                from datetime import datetime
+                return datetime.now().month
+            except:
+                return 0
+        
+        def safe_day():
+            try:
+                from datetime import datetime
+                return datetime.now().day
+            except:
+                return 0
+        
+        # 条件和逻辑函数
+        def safe_coalesce(*args):
+            for arg in args:
+                if arg is not None and arg != "":
+                    return arg
+            return None
+        
+        def safe_default(value, default_value):
+            return value if value is not None and value != "" else default_value
+        
+        def safe_conditional(condition, true_value, false_value):
+            return true_value if condition else false_value
+        
+        # 局部变量操作函数
+        def safe_set_var(name, value):
+            """设置局部变量 - 这个函数会通过上下文管理器处理"""
+            return value
+        
+        def safe_let(var_name, value):
+            """let语法支持 - 创建临时变量绑定"""
+            return value
+        
+        # URL和编码函数
+        def safe_quote(s):
+            try:
+                import urllib.parse
+                return urllib.parse.quote(str(s))
+            except:
+                return str(s)
+        
+        def safe_unquote(s):
+            try:
+                import urllib.parse
+                return urllib.parse.unquote(str(s))
+            except:
+                return str(s)
+        
+        def safe_json_encode(value):
+            try:
+                import json
+                return json.dumps(value, ensure_ascii=False)
+            except:
+                return ""
+        
+        def safe_json_decode(s):
+            try:
+                import json
+                return json.loads(str(s))
+            except:
+                return None
+        
         safe_builtins = {
+            # 基础常量
             'None': None,
             'True': True,
             'False': False,
+            # 基础类型
             'bool': bool,
             'int': int,
             'float': float,
@@ -418,6 +784,7 @@ class TemplateParser:
             'list': list,
             'dict': dict,
             'tuple': tuple,
+            # 基础函数
             'len': len,
             'sum': sum,
             'min': min,
@@ -425,9 +792,65 @@ class TemplateParser:
             'abs': abs,
             'round': round,
             'pow': pow,
+            # 字符串操作
+            'upper': safe_upper,
+            'lower': safe_lower,
+            'title': safe_title,
+            'capitalize': safe_capitalize,
+            'strip': safe_strip,
+            'lstrip': safe_lstrip,
+            'rstrip': safe_rstrip,
+            'split': safe_split,
+            'join': safe_join,
+            'replace': safe_replace,
+            'startswith': safe_startswith,
+            'endswith': safe_endswith,
+            'contains': safe_contains,
+            'length': safe_length,
+            'slice': safe_slice,
+            # 列表/数组操作
+            'first': safe_first,
+            'last': safe_last,
+            'rest': safe_rest,
+            'take': safe_take,
+            'reverse': safe_reverse,
+            'sort': safe_sort,
+            'unique': safe_unique,
+            'concat': safe_concat,
+            # 类型转换和检查
+            'to_string': safe_to_string,
+            'to_int': safe_to_int,
+            'to_float': safe_to_float,
+            'to_list': safe_to_list,
+            'is_empty': safe_is_empty,
+            'is_not_empty': safe_is_not_empty,
+            'is_numeric': safe_is_numeric,
+            'type_of': safe_type_of,
+            # 数学函数
             'sqrt': lambda x: x ** 0.5,
             'ceil': lambda x: int(x) + (1 if x > int(x) else 0),
-            'floor': int
+            'floor': int,
+            'mean': safe_mean,
+            'median': safe_median,
+            'range': safe_range,
+            # 日期时间
+            'now': safe_now,
+            'today': safe_today,
+            'year': safe_year,
+            'month': safe_month,
+            'day': safe_day,
+            # 逻辑和条件
+            'coalesce': safe_coalesce,
+            'default': safe_default,
+            'conditional': safe_conditional,
+            # 局部变量操作
+            'set': safe_set_var,
+            'let': safe_let,
+            # URL和编码
+            'quote': safe_quote,
+            'unquote': safe_unquote,
+            'json_encode': safe_json_encode,
+            'json_decode': safe_json_decode,
         }
         return safe_builtins
 
@@ -645,9 +1068,81 @@ class TemplateParser:
             return f"[Error: Failed to include '{filename}': {str(e)}]"
     
     def _evaluate_calculation(self, expr: str, context: Dict[str, Any]) -> Any:
-        """Evaluate mathematical expressions with enhanced safety."""
+        """Evaluate mathematical expressions with enhanced safety and local variable support."""
         if not self._is_safe_expression(expr):
             raise ValueError(f"Potentially dangerous expression: {expr}")
+        
+        # Check for set/let expressions
+        stripped_expr = expr.strip()
+        
+        # Handle set variable: set('var_name', value)
+        if stripped_expr.startswith('set('):
+            try:
+                # Parse set('var_name', value)
+                import re
+                match = re.match(r"set\(['\"]([^'\"]+)['\"]\s*,\s*(.+)\)", stripped_expr)
+                if match:
+                    var_name = match.group(1)
+                    value_expr = match.group(2)
+                    
+                    # Evaluate the value
+                    safe_globals = self._get_safe_globals()
+                    safe_globals.update({
+                        'pow': pow,
+                        'sqrt': lambda x: x ** 0.5,
+                        'ceil': lambda x: int(x) + (1 if x > int(x) else 0),
+                        'floor': int,
+                        'abs': abs,
+                        'round': round,
+                        'min': min,
+                        'max': max,
+                        'sum': sum
+                    })
+                    eval_globals = {**safe_globals, **self.custom_functions}
+                    
+                    value = eval(value_expr, eval_globals, context)
+                    
+                    # Store in context for future use
+                    context[var_name] = value
+                    
+                    return value
+            except Exception as e:
+                return f"[Set Error: {str(e)}]"
+        
+        # Handle let expression: let('var_name', value)
+        elif stripped_expr.startswith('let('):
+            try:
+                # Parse let('var_name', value)
+                import re
+                match = re.match(r"let\(['\"]([^'\"]+)['\"]\s*,\s*(.+)\)", stripped_expr)
+                if match:
+                    var_name = match.group(1)
+                    value_expr = match.group(2)
+                    
+                    # Evaluate the value
+                    safe_globals = self._get_safe_globals()
+                    safe_globals.update({
+                        'pow': pow,
+                        'sqrt': lambda x: x ** 0.5,
+                        'ceil': lambda x: int(x) + (1 if x > int(x) else 0),
+                        'floor': int,
+                        'abs': abs,
+                        'round': round,
+                        'min': min,
+                        'max': max,
+                        'sum': sum
+                    })
+                    eval_globals = {**safe_globals, **self.custom_functions}
+                    
+                    value = eval(value_expr, eval_globals, context)
+                    
+                    # Create a new context with the local variable
+                    # In let expressions, the variable is available within the current evaluation scope
+                    context[var_name] = value
+                    
+                    return value
+            except Exception as e:
+                return f"[Let Error: {str(e)}]"
         
         # Enhanced safe globals with math functions
         safe_globals = self._get_safe_globals()
@@ -674,7 +1169,70 @@ class TemplateParser:
         """Render a list of template parts with the given context."""
         temp_parser = TemplateParser('', self.template_dir)
         temp_parser.compiled = parts
-        return temp_parser.render(context)
+        
+        # Create a copy of context for this rendering scope
+        local_context = context.copy()
+        
+        # Process parts to handle set/let statements
+        processed_parts = []
+        i = 0
+        while i < len(parts):
+            part = parts[i]
+            
+            if (isinstance(part, str) and 
+                part.startswith('{%') and 
+                part.endswith('%}')):
+                block = part[2:-2].strip()
+                
+                # Handle set variable
+                if block.startswith('set '):
+                    set_content = block[4:].strip()
+                    if '=' in set_content:
+                        var_name, value_expr = set_content.split('=', 1)
+                        var_name = var_name.strip()
+                        value_expr = value_expr.strip()
+                        
+                        # Evaluate value expression
+                        try:
+                            if value_expr.startswith('='):
+                                value_expr = value_expr[1:]
+                            value = self._evaluate_calculation(value_expr, local_context)
+                            # Store in local context
+                            local_context[var_name] = value
+                        except Exception as e:
+                            local_context[var_name] = f"[Set Error: {str(e)}]"
+                    
+                    # Skip this part (set statement doesn't produce output)
+                    i += 1
+                    continue
+                
+                # Handle let variable  
+                elif block.startswith('let '):
+                    let_content = block[4:].strip()
+                    if '=' in let_content:
+                        var_name, value_expr = let_content.split('=', 1)
+                        var_name = var_name.strip()
+                        value_expr = value_expr.strip()
+                        
+                        # Evaluate value expression
+                        try:
+                            if value_expr.startswith('='):
+                                value_expr = value_expr[1:]
+                            value = self._evaluate_calculation(value_expr, local_context)
+                            # Store in local context
+                            local_context[var_name] = value
+                        except Exception as e:
+                            local_context[var_name] = f"[Let Error: {str(e)}]"
+                    
+                    # Skip this part (let statement doesn't produce output)
+                    i += 1
+                    continue
+            
+            processed_parts.append(part)
+            i += 1
+        
+        temp_parser.compiled = processed_parts
+        return temp_parser.render(local_context)
 
 
 # Example usage
@@ -863,6 +1421,203 @@ if __name__ == '__main__':
     include_result = include_parser.render(include_context)
     print("\n=== Include 模板渲染结果 ===")
     print(include_result)
+    
+    # 新增变量操作函数示例
+    print("\n=== 变量操作函数示例 ===")
+    
+    # 创建包含各种变量操作的模板
+    var_ops_template = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>变量操作函数演示</title>
+    </head>
+    <body>
+        <h1>字符串操作</h1>
+        <ul>
+            <li>转大写: {{= upper(text) }}</li>
+            <li>转小写: {{= lower(text) }}</li>
+            <li>标题格式: {{= title(text) }}</li>
+            <li>首字母大写: {{= capitalize(text) }}</li>
+            <li>去除空格: '{{= strip(whitespace_text) }}'</li>
+            <li>分割成数组: {{= split(csv_text, ',') }}</li>
+            <li>替换文本: {{= replace(text, 'World', 'Template') }}</li>
+            <li>字符串长度: {{= length(text) }}</li>
+            <li>包含检查: {{= contains(text, 'Hello') }}</li>
+            <li>切片操作: {{= slice(text, 0, 5) }}</li>
+        </ul>
+        
+        <h1>列表操作</h1>
+        <ul>
+            <li>第一个元素: {{= first(items) }}</li>
+            <li>最后一个元素: {{= last(items) }}</li>
+            <li>除第一个外的元素: {{= rest(items) }}</li>
+            <li>取前3个元素: {{= take(items, 3) }}</li>
+            <li>反转列表: {{= reverse(items) }}</li>
+            <li>排序列表: {{= sort(unsorted_items) }}</li>
+            <li>去重列表: {{= unique(duplicate_items) }}</li>
+            <li>列表连接: {{= concat(items, more_items) }}</li>
+        </ul>
+        
+        <h1>类型转换</h1>
+        <ul>
+            <li>转字符串: {{= to_string(number) }}</li>
+            <li>转整数: {{= to_int(decimal_num) }}</li>
+            <li>转浮点数: {{= to_float(int_num) }}</li>
+            <li>转列表: {{= to_list(single_value) }}</li>
+            <li>是否为空: {{= is_empty(empty_var) }}</li>
+            <li>是否不为空: {{= is_not_empty(text) }}</li>
+            <li>是否为数字: {{= is_numeric(number) }}</li>
+            <li>变量类型: {{= type_of(items) }}</li>
+        </ul>
+        
+        <h1>数学计算</h1>
+        <ul>
+            <li>平均值: {{= mean(numbers) }}</li>
+            <li>中位数: {{= median(numbers) }}</li>
+            <li>范围数组: {{= range(1, 6) }}</li>
+            <li>平方根: {{= sqrt(16) }}</li>
+            <li>向上取整: {{= ceil(3.2) }}</li>
+            <li>向下取整: {{= floor(3.8) }}</li>
+        </ul>
+        
+        <h1>日期时间</h1>
+        <ul>
+            <li>当前时间: {{= now() }}</li>
+            <li>今天日期: {{= today() }}</li>
+            <li>当前年份: {{= year() }}</li>
+            <li>当前月份: {{= month() }}</li>
+            <li>当前日期: {{= day() }}</li>
+        </ul>
+        
+        <h1>逻辑和条件</h1>
+        <ul>
+            <li>合并非空值: {{= coalesce(null_var, empty_var, text, 'default') }}</li>
+            <li>默认值: {{= default(null_var, 'Default Value') }}</li>
+            <li>条件选择: {{= conditional(score > 80, '优秀', '一般') }}</li>
+        </ul>
+        
+        <h1>URL和编码</h1>
+        <ul>
+            <li>URL编码: {{= quote(text_with_spaces) }}</li>
+            <li>URL解码: {{= unquote(encoded_text) }}</li>
+            <li>JSON编码: {{= json_encode(data_obj) }}</li>
+            <li>JSON解码: {{= json_decode(json_str).name }}</li>
+        </ul>
+        
+        <h1>循环中使用函数</h1>
+        {% for item in mixed_items %}
+            <p>
+                索引 {{ loop.index }}: {{= upper(to_string(item)) }}
+                {% if is_numeric(item) %}
+                    (数字，平方根: {{= sqrt(item) }})
+                {% else %}
+                    (字符串，长度: {{= length(item) }})
+                {% endif %}
+            </p>
+        {% endfor %}
+    </body>
+    </html>
+    """
+    
+    # 创建解析器并渲染
+    var_parser = TemplateParser(var_ops_template)
+    var_context = {
+        'text': 'Hello World',
+        'whitespace_text': '  Hello World  ',
+        'csv_text': 'apple,banana,cherry',
+        'items': ['apple', 'banana', 'cherry'],
+        'more_items': ['date', 'elderberry'],
+        'unsorted_items': [3, 1, 4, 1, 5, 9],
+        'duplicate_items': [1, 2, 2, 3, 3, 4],
+        'number': 42,
+        'decimal_num': '3.14',
+        'int_num': 42,
+        'single_value': 'single',
+        'empty_var': '',
+        'null_var': None,
+        'numbers': [1, 2, 3, 4, 5],
+        'score': 85,
+        'text_with_spaces': 'hello world',
+        'encoded_text': 'hello%20world',
+        'data_obj': {'name': 'test', 'value': 100},
+        'json_str': '{"name": "JSON", "value": 200}',
+        'mixed_items': ['hello', 16, 'world', 25, 'python', 36]
+    }
+    
+    var_result = var_parser.render(var_context)
+    print(var_result)
+    
+    # 局部变量示例
+    print("\n=== 局部变量示例 ===")
+    
+    # 创建包含局部变量操作的模板
+    local_var_template = """
+    <h1>局部变量演示</h1>
+    
+    <h2>使用 set 语句设置变量</h2>
+    {% set greeting = "Hello" %}
+    {% set user_name = "Alice" %}
+    {% set user_age = 25 %}
+    <p>{{ greeting }}, {{ user_name }}! You are {{ user_age }} years old.</p>
+    
+    <h2>使用 let 语句创建临时变量</h2>
+    {% let temp_result = 100 * 1.2 %}
+    <p>临时计算结果: {{ temp_result }}</p>
+    
+    <h2>在条件语句中使用局部变量</h2>
+    {% set discount_rate = 0.2 %}
+    {% set original_price = 200 %}
+    {% set final_price = original_price * (1 - discount_rate) %}
+    
+    {% if final_price < 150 %}
+        <p>折扣后价格: {{ final_price }} - 优惠价格!</p>
+    {% else %}
+        <p>折扣后价格: {{ final_price }}</p>
+    {% endif %}
+    
+    <h2>在循环中使用局部变量</h2>
+    {% set prefix = "Item" %}
+    {% for item in [10, 20, 30, 40] %}
+        {% set doubled = item * 2 %}
+        {% let is_even = (item % 2 == 0) %}
+        <p>{{ prefix }} {{ loop.index }}: Original = {{ item }}, Doubled = {{ doubled }}, Is Even = {{ is_even }}</p>
+    {% endfor %}
+    
+    <h2>复杂的变量操作</h2>
+    {% let base_text = "Template Engine" %}
+    {% set processed_text = upper(base_text) %}
+    {% set text_length = length(processed_text) %}
+    {% set reversed_text = reverse(list(processed_text)) %}
+    <p>原始文本: {{ base_text }}</p>
+    <p>处理后: {{ processed_text }}</p>
+    <p>长度: {{ text_length }}</p>
+    <p>反转字符列表: {{ reversed_text }}</p>
+    
+    <h2>函数调用中的局部变量</h2>
+    {% set current_time = now("%H:%M:%S") %}
+    {% set greeting_msg = conditional(length(current_time) > 10, "时间详细", "时间简洁") %}
+    <p>当前时间: {{ current_time }} ({{ greeting_msg }})</p>
+    
+    <h2>嵌套的局部变量</h2>
+    {% set outer_var = "Outer" %}
+    {% if True %}
+        {% let inner_var = "Inner" %}
+        {% set combined = outer_var + " " + inner_var %}
+        <p>组合结果: {{ combined }}</p>
+    {% endif %}
+    <p>外部变量仍然存在: {{ outer_var }}</p>
+    """
+    
+    # 创建解析器并渲染
+    local_parser = TemplateParser(local_var_template)
+    local_result = local_parser.render({
+        'user_info': {
+            'name': 'Test User',
+            'email': 'test@example.com'
+        }
+    })
+    print(local_result)
     
     # 清理创建的示例文件
     import shutil
