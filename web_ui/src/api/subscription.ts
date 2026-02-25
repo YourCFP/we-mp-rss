@@ -82,6 +82,11 @@ export const updateSubscription = (mp_id: string, data: Partial<Subscription>) =
   return http.put<{code: number, message: string}>(`/wx/mps/${mp_id}`, data)
 }
 
+// 切换公众号状态（启用/禁用）
+export const toggleMpStatus = (mp_id: string, status: number) => {
+  return http.put<{code: number, message: string}>(`/wx/mps/${mp_id}`, { status })
+}
+
 export const searchBiz = (kw: string, params: { page?: number; pageSize?: number }) => {
   const apiParams = {
     offset: (params?.page || 0) * (params?.pageSize || 10),

@@ -84,11 +84,34 @@
   </a-spin>
 
   <a-drawer v-model:visible="mpListVisible" title="选择公众号" @ok="handleMpSelect" @cancel="mpListVisible = false" placement="left" width="99%">
-    <a-list :data="mpList" :loading="mpLoading" bordered>
+    <div style="margin-bottom: 12px; padding: 0 8px;">
+      <a-radio-group v-model="mpFilterType" type="button" size="small" style="width: 100%;">
+        <a-radio value="active" style="flex: 1; text-align: center;">启用</a-radio>
+        <a-radio value="disabled" style="flex: 1; text-align: center;">停用</a-radio>
+        <a-radio value="all" style="flex: 1; text-align: center;">全部</a-radio>
+      </a-radio-group>
+    </div>
+    <a-list :data="filteredMpList" :loading="mpLoading" bordered>
       <template #item="{ item }">
-        <a-list-item @click="handleMpClick(item.id)" :class="{ 'active-mp': activeMpId === item.id }">
+        <a-list-item @click="handleMpClick(item.id)" :class="{ 'active-mp': activeMpId === item.id }"
+          style="display: flex; align-items: center; justify-content: space-between;">
+          <div style="display: flex; align-items: center;">
             <img :src="Avatar(item.avatar)" width="40" style="float:left;margin-right:1rem;"/>
-            <a-typography-text style="line-height:40px;margin-left:1rem;" strong>{{ item.name || item.mp_name }}</a-typography-text>
+            <a-typography-text style="line-height:40px;margin-left:1rem;" strong :style="{ opacity: item.status === 0 ? 0.5 : 1 }">
+              {{ item.name || item.mp_name }}
+            </a-typography-text>
+          </div>
+          <a-space v-if="activeMpId === item.id && item.id != ''">
+            <a-button size="mini" type="text" @click="$event.stopPropagation(); copyMpId(item.id)">
+              <template #icon><icon-copy /></template>
+            </a-button>
+            <a-button size="mini" type="text" @click="$event.stopPropagation(); toggleMpStatus(item.id, item.status === 1 ? 0 : 1)">
+              <template #icon>
+                <icon-stop v-if="item.status === 1" />
+                <icon-play-arrow v-else />
+              </template>
+            </a-button>
+          </a-space>
         </a-list-item>
       </template>
     </a-list>
@@ -131,10 +154,10 @@
 <script setup lang="ts">
 import { formatDateTime,formatTimestamp } from '@/utils/date'
 import { Avatar } from '@/utils/constants'
-import { ref, onMounted } from 'vue'
-import { IconCheck, IconClose } from '@arco-design/web-vue/es/icon'
+import { ref, onMounted, computed } from 'vue'
+import { IconCheck, IconClose, IconStop, IconPlayArrow, IconCopy } from '@arco-design/web-vue/es/icon'
 import { getArticles, getArticleDetail,getPrevArticle,getNextArticle,toggleArticleReadStatus } from '@/api/article'
-import { getSubscriptions } from '@/api/subscription'
+import { getSubscriptions, toggleMpStatus as toggleMpStatusApi } from '@/api/subscription'
 import { Message } from '@arco-design/web-vue'
 import { ProxyImage } from '@/utils/constants'
 const articles = ref([])
@@ -144,6 +167,7 @@ const mpLoading = ref(false)
 const activeMpId = ref('')
 const searchText = ref('')
 const mpListVisible = ref(false)
+const mpFilterType = ref('active') // 'active' | 'disabled' | 'all'
 
 const pagination = ref({
   current: 1,
@@ -269,6 +293,18 @@ const fullLoading = ref(false)
 const loadingMore = ref(false)
 const hasMore = ref(true)
 
+// 过滤后的公众号列表
+const filteredMpList = computed(() => {
+  if (mpFilterType.value === 'all') {
+    return mpList.value
+  }
+  if (mpFilterType.value === 'disabled') {
+    return mpList.value.filter(item => item.status === 0)
+  }
+  // 'active' - 默认只显示启用的和"全部"选项
+  return mpList.value.filter(item => item.status !== 0 || item.id === '')
+})
+
 const handleScroll = (event: Event) => {
   const target = event.target as HTMLElement
   const { scrollTop, scrollHeight, clientHeight } = target
@@ -306,7 +342,8 @@ const fetchMpList = async () => {
       id: item.id || item.mp_id,
       name: item.name || item.mp_name,
       avatar: item.avatar || item.mp_cover || '',
-      mp_intro: item.mp_intro || item.mp_intro || ''
+      mp_intro: item.mp_intro || item.mp_intro || '',
+      status: item.status ?? 1
     }))
   } catch (error) {
     console.error('获取公众号列表错误:', error)
@@ -333,6 +370,48 @@ const toggleReadStatus = async (record: any) => {
     Message.error('更新阅读状态失败');
   }
 };
+
+// 切换公众号状态
+const toggleMpStatus = async (mpId: string, newStatus: number) => {
+  try {
+    await toggleMpStatusApi(mpId, newStatus);
+    Message.success(newStatus === 0 ? '公众号已禁用' : '公众号已启用');
+    // 更新本地数据
+    const index = mpList.value.findIndex(item => item.id === mpId);
+    if (index !== -1) {
+      mpList.value[index].status = newStatus;
+    }
+  } catch (error) {
+    console.error('更新公众号状态失败:', error);
+    Message.error('更新公众号状态失败');
+  }
+}
+
+// 复制MP ID
+const copyMpId = async (mpId: string) => {
+  try {
+    await navigator.clipboard.writeText(mpId);
+    Message.success('MP ID 已复制到剪贴板');
+  } catch (error) {
+    // 如果 clipboard API 不可用，使用传统方法
+    const textArea = document.createElement('textarea');
+    textArea.value = mpId;
+    textArea.style.position = 'fixed';
+    textArea.style.left = '-999999px';
+    textArea.style.top = '-999999px';
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+      Message.success('MP ID 已复制到剪贴板');
+    } catch (err) {
+      Message.error('复制失败，请手动复制');
+      console.error('复制失败:', err);
+    }
+    document.body.removeChild(textArea);
+  }
+}
 
 onMounted(() => {
   fetchMpList()

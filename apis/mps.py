@@ -305,3 +305,53 @@ async def delete_mp(
                 message="删除订阅号失败"
             )
         )
+
+@router.put("/{mp_id}", summary="更新订阅号状态")
+async def update_mp_status(
+    mp_id: str,
+    mp_name: str = Body(None),
+    mp_cover: str = Body(None),
+    mp_intro: str = Body(None),
+    status: int = Body(None),
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    session = DB.get_session()
+    try:
+        from core.models.feed import Feed
+        mp = session.query(Feed).filter(Feed.id == mp_id).first()
+        if not mp:
+            raise HTTPException(
+                status_code=status.HTTP_201_CREATED,
+                detail=error_response(
+                    code=40401,
+                    message="订阅号不存在"
+                )
+            )
+        
+        if mp_name is not None:
+            mp.mp_name = mp_name
+        if mp_cover is not None:
+            mp.mp_cover = mp_cover
+        if mp_intro is not None:
+            mp.mp_intro = mp_intro
+        if status is not None:
+            mp.status = status
+        
+        mp.updated_at = datetime.now()
+        session.commit()
+        
+        return success_response({
+            "message": "更新成功",
+            "id": mp_id,
+            "status": mp.status
+        })
+    except Exception as e:
+        session.rollback()
+        print(f"更新订阅号错误: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_201_CREATED,
+            detail=error_response(
+                code=50001,
+                message="更新订阅号失败"
+            )
+        )

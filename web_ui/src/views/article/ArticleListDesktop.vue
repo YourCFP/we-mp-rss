@@ -31,13 +31,20 @@
                 allow-clear 
                 size="small" />
             </div>
-            <a-list :data="mpList" :loading="mpLoading" bordered>
+            <div style="margin-bottom: 8px; padding: 0 8px;">
+              <a-radio-group v-model="mpFilterType" type="button" size="small" style="width: 100%;">
+                <a-radio value="active" style="flex: 1; text-align: center;">启用</a-radio>
+                <a-radio value="disabled" style="flex: 1; text-align: center;">停用</a-radio>
+                <a-radio value="all" style="flex: 1; text-align: center;">全部</a-radio>
+              </a-radio-group>
+            </div>
+            <a-list :data="filteredMpList" :loading="mpLoading" bordered>
               <template #item="{ item, index }">
                 <a-list-item @click="handleMpClick(item.id)" :class="{ 'active-mp': activeMpId === item.id }"
                   style="padding: 9px 8px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
                   <div style="display: flex; align-items: center;">
                     <img :src="Avatar(item.avatar)" width="40" style="float:left;margin-right:1rem;" />
-                    <a-typography-text strong style="line-height:32px;">
+                    <a-typography-text strong style="line-height:32px;" :style="{ opacity: item.status === 0 ? 0.5 : 1 }">
                       {{ item.name || item.mp_name }}
                     </a-typography-text>
                     <a-button v-if="activeMpId === item.id && item.id != ''" size="mini" type="text" status="danger"
@@ -47,6 +54,13 @@
                     <a-button v-if="activeMpId === item.id && item.id != ''" size="mini" type="text"
                       @click="$event.stopPropagation(); copyMpId(item.id)">
                       <template #icon><icon-copy /></template>
+                    </a-button>
+                    <a-button v-if="activeMpId === item.id && item.id != ''" size="mini" type="text"
+                      @click="$event.stopPropagation(); toggleMpStatus(item.id, item.status === 1 ? 0 : 1)">
+                      <template #icon>
+                        <icon-stop v-if="item.status === 1" />
+                        <icon-play-arrow v-else />
+                      </template>
                     </a-button>
                   </div>
                 </a-list-item>
@@ -204,13 +218,13 @@
 <script setup lang="ts">
 import { Avatar } from '@/utils/constants'
 import { translatePage, setCurrentLanguage } from '@/utils/translate';
-import { ref, onMounted, h, nextTick, watch } from 'vue'
+import { ref, onMounted, h, nextTick, watch, computed } from 'vue'
 import axios from 'axios'
-import { IconApps, IconAtt, IconDelete, IconEdit, IconEye, IconRefresh, IconScan, IconWeiboCircleFill, IconWifi, IconCode, IconCheck, IconClose } from '@arco-design/web-vue/es/icon'
+import { IconApps, IconAtt, IconDelete, IconEdit, IconEye, IconRefresh, IconScan, IconWeiboCircleFill, IconWifi, IconCode, IconCheck, IconClose, IconStop, IconPlayArrow, IconCopy, IconPlus, IconDown, IconExport, IconImport, IconShareExternal } from '@arco-design/web-vue/es/icon'
 import { getArticles, deleteArticle as deleteArticleApi, ClearArticle, ClearDuplicateArticle, getArticleDetail, toggleArticleReadStatus } from '@/api/article'
 import { ExportOPML, ExportMPS, ImportMPS } from '@/api/export'
 import ExportModal from '@/components/ExportModal.vue'
-import { getSubscriptions, UpdateMps } from '@/api/subscription'
+import { getSubscriptions, UpdateMps, toggleMpStatus as toggleMpStatusApi } from '@/api/subscription'
 import { inject } from 'vue'
 import { Message, Modal } from '@arco-design/web-vue'
 import { formatDateTime, formatTimestamp } from '@/utils/date'
@@ -235,6 +249,7 @@ const mpPagination = ref({
   showTotal: true,
   pageSizeOptions: [5, 10, 15]
 })
+const mpFilterType = ref('active') // 'active' | 'disabled' | 'all'
 const searchText = ref('')
 const filterStatus = ref('')
 const mpSearchText = ref('')
@@ -406,6 +421,18 @@ const fetchArticles = async () => {
   }
 }
 const issourceUrl = ref(false)
+
+// 过滤后的公众号列表
+const filteredMpList = computed(() => {
+  if (mpFilterType.value === 'all') {
+    return mpList.value
+  }
+  if (mpFilterType.value === 'disabled') {
+    return mpList.value.filter(item => item.status === 0)
+  }
+  // 'active' - 默认只显示启用的和"全部"选项
+  return mpList.value.filter(item => item.status !== 0 || item.id === '')
+})
 
 // 从 localStorage 读取 issourceUrl 值
 const initIssourceUrl = () => {
@@ -701,7 +728,8 @@ const fetchMpList = async () => {
       name: item.name || item.mp_name,
       avatar: item.avatar || item.mp_cover || '',
       mp_intro: item.mp_intro || item.mp_intro || '',
-      article_count: item.article_count || 0
+      article_count: item.article_count || 0,
+      status: item.status ?? 1
     }))
     // 添加'全部'选项 - 只在没有搜索时显示
     if (!mpSearchText.value) {
@@ -710,7 +738,8 @@ const fetchMpList = async () => {
         name: '全部',
         avatar: '/static/logo.svg',
         mp_intro: '显示所有公众号文章',
-        article_count: res.total || 0
+        article_count: res.total || 0,
+        status: 1
       });
     }
     mpPagination.value.total = res.total || 0
@@ -765,6 +794,21 @@ const deleteMp = async (mpId: string) => {
   } catch (error) {
     console.error('删除订阅号失败:', error);
     Message.error('删除订阅号失败，请稍后重试');
+  }
+}
+
+const toggleMpStatus = async (mpId: string, newStatus: number) => {
+  try {
+    await toggleMpStatusApi(mpId, newStatus);
+    Message.success(newStatus === 0 ? '公众号已禁用' : '公众号已启用');
+    // 更新本地数据
+    const index = mpList.value.findIndex(item => item.id === mpId);
+    if (index !== -1) {
+      mpList.value[index].status = newStatus;
+    }
+  } catch (error) {
+    console.error('更新公众号状态失败:', error);
+    Message.error('更新公众号状态失败');
   }
 }
 
