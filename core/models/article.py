@@ -12,6 +12,7 @@ class ArticleBase(Base):
     publish_time = Column(Integer,index=True)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)  
+    updated_at_millis = Column(Integer)  
     is_export = Column(Integer)
     is_read = Column(Integer, default=0)
 class Article(ArticleBase):

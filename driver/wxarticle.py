@@ -30,12 +30,12 @@ class WXArticleFetcher:
     
     def convert_publish_time_to_timestamp(self, publish_time_str: str) -> int:
         """将发布时间字符串转换为时间戳
-        
+
         Args:
             publish_time_str: 发布时间字符串，如 "2024-01-01" 或 "2024-01-01 12:30"
-            
+
         Returns:
-            时间戳（秒）
+            时间戳（毫秒）
         """
         try:
             # 尝试解析不同的时间格式
@@ -62,13 +62,13 @@ class WXArticleFetcher:
                             dt = dt.replace(year=current_year - 1)
                     else:
                         dt = datetime.strptime(publish_time_str, fmt)
-                    return int(dt.timestamp())
+                    return int(dt.timestamp() * 1000)
                 except ValueError:
                     continue
             
             # 如果所有格式都失败，返回当前时间戳
             print_warning(f"无法解析时间格式: {publish_time_str}，使用当前时间")
-            return int(datetime.now().timestamp())
+            return int(datetime.now().timestamp() * 1000)
             
         except Exception as e:
             print_error(f"时间转换失败: {e}")
