@@ -111,3 +111,34 @@ export const testNodeConnection = (nodeId: string, data?: TestConnectionRequest)
 export const getSyncLogs = (params?: { node_id?: string; operation?: string; limit?: number; offset?: number }) => {
   return http.get<SyncLogsResponse>('/wx/cascade/sync-logs', { params })
 }
+
+// 任务分配相关接口
+
+export interface TaskAllocation {
+  allocation_id: string
+  node_id: string
+  node_name?: string
+  task_id: string
+  feed_ids: string[]
+  status: string  // pending, executing, completed, failed
+  created_at: string
+  updated_at: string
+}
+
+export interface AllocationsResponse {
+  list: TaskAllocation[]
+  total: number
+}
+
+// 获取任务分配列表
+export const getAllocations = (params?: { task_id?: string; node_id?: string; status?: string; limit?: number }) => {
+  return http.get<AllocationsResponse>('/wx/cascade/allocations', { params })
+}
+
+// 分发任务
+export const dispatchTask = (taskId?: string) => {
+  const url = taskId 
+    ? `/wx/cascade/dispatch-task?task_id=${taskId}`
+    : '/wx/cascade/dispatch-task'
+  return http.post(url)
+}

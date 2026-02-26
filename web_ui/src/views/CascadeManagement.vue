@@ -7,11 +7,13 @@ import {
   deleteNode,
   generateNodeCredentials,
   testNodeConnection,
-  getSyncLogs
+  getSyncLogs,
+  getAllocations,
+  dispatchTask
 } from '@/api/cascade'
-import type { CascadeNode, CreateNodeRequest, UpdateNodeRequest, SyncLog } from '@/api/cascade'
+import type { CascadeNode, CreateNodeRequest, UpdateNodeRequest, SyncLog, TaskAllocation } from '@/api/cascade'
 import { Modal, Message } from '@arco-design/web-vue'
-import { IconCopy, IconDelete, IconEdit, IconRefresh, IconLink, IconCheckCircle, IconCloseCircle } from '@arco-design/web-vue/es/icon'
+import { IconCopy, IconDelete, IconEdit, IconRefresh, IconLink, IconCheckCircle, IconCloseCircle, IconThunderbolt, IconQuestionCircle } from '@arco-design/web-vue/es/icon'
 
 const columns = [
   { title: '节点名称', dataIndex: 'name' },
@@ -33,11 +35,25 @@ const logColumns = [
   { title: '完成时间', dataIndex: 'completed_at' }
 ]
 
+const allocationColumns = [
+  { title: '分配ID', dataIndex: 'allocation_id', ellipsis: true, width: 120 },
+  { title: '任务ID', dataIndex: 'task_id', ellipsis: true, width: 120 },
+  { title: '节点名称', dataIndex: 'node_name' },
+  { title: '公众号数', dataIndex: 'feed_ids', slotName: 'feed_count' },
+  { title: '状态', slotName: 'allocation_status' },
+  { title: '创建时间', slotName: 'created_at' },
+  { title: '更新时间', slotName: 'updated_at' }
+]
+
 const nodeList = ref<CascadeNode[]>([])
 const logList = ref<SyncLog[]>([])
+const allocationList = ref<TaskAllocation[]>([])
 const totalLogs = ref(0)
+const totalAllocations = ref(0)
 const loading = ref(false)
 const logLoading = ref(false)
+const allocationLoading = ref(false)
+const dispatching = ref(false)
 const error = ref('')
 const visible = ref(false)
 const modalTitle = ref('创建节点')
@@ -84,6 +100,32 @@ const fetchLogs = async () => {
     console.error('获取同步日志失败:', err)
   } finally {
     logLoading.value = false
+  }
+}
+
+const fetchAllocations = async () => {
+  try {
+    allocationLoading.value = true
+    const res = await getAllocations({ limit: 50 })
+    allocationList.value = res?.list || []
+    totalAllocations.value = res?.total || 0
+  } catch (err) {
+    console.error('获取任务分配失败:', err)
+  } finally {
+    allocationLoading.value = false
+  }
+}
+
+const handleDispatchTask = async () => {
+  try {
+    dispatching.value = true
+    await dispatchTask()
+    Message.success('任务分发成功')
+    fetchAllocations()
+  } catch (err) {
+    Message.error('任务分发失败: ' + (err instanceof Error ? err.message : '未知错误'))
+  } finally {
+    dispatching.value = false
   }
 }
 
@@ -259,6 +301,26 @@ const getLogStatusText = (status: number) => {
   return '进行中'
 }
 
+const getAllocationStatusColor = (status: string) => {
+  const map: Record<string, string> = {
+    pending: 'orange',
+    executing: 'blue',
+    completed: 'green',
+    failed: 'red'
+  }
+  return map[status] || 'gray'
+}
+
+const getAllocationStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    pending: '待执行',
+    executing: '执行中',
+    completed: '已完成',
+    failed: '失败'
+  }
+  return map[status] || status
+}
+
 const handlePageChange = (page: number) => {
   logPagination.offset = (page - 1) * logPagination.limit
   fetchLogs()
@@ -267,6 +329,8 @@ const handlePageChange = (page: number) => {
 const handleTabChange = (key: string) => {
   if (key === 'logs') {
     fetchLogs()
+  } else if (key === 'allocations') {
+    fetchAllocations()
   }
 }
 
@@ -309,6 +373,19 @@ onMounted(() => {
             >
               级联系统支持父子节点架构。父节点负责统一管理数据，子节点从父节点同步并执行任务。
             </a-alert>
+            
+            <!-- 任务分发按钮 -->
+            <a-space>
+              <a-button type="primary" :loading="dispatching" @click="handleDispatchTask">
+                <template #icon>
+                  <icon-thunderbolt />
+                </template>
+                分发任务
+              </a-button>
+              <a-tooltip content="将消息任务分配给在线的子节点执行">
+                <icon-question-circle style="color: #999;" />
+              </a-tooltip>
+            </a-space>
 
             <a-table
               :columns="columns"
@@ -447,6 +524,53 @@ onMounted(() => {
           </a-table>
 
           <a-empty v-if="!logLoading && logList.length === 0" description="暂无同步日志" />
+        </a-tab-pane>
+
+        <a-tab-pane key="allocations" title="任务分配">
+          <a-space direction="vertical" fill>
+            <a-space>
+              <a-button type="primary" :loading="dispatching" @click="handleDispatchTask">
+                <template #icon>
+                  <icon-thunderbolt />
+                </template>
+                分发任务
+              </a-button>
+              <a-button @click="fetchAllocations" :loading="allocationLoading">
+                <template #icon>
+                  <icon-refresh />
+                </template>
+                刷新
+              </a-button>
+            </a-space>
+
+            <a-table
+              :columns="allocationColumns"
+              :data="allocationList"
+              :loading="allocationLoading"
+              row-key="allocation_id"
+              :pagination="false"
+            >
+              <template #feed_count="{ record }">
+                <a-tag color="blue">{{ record.feed_ids?.length || 0 }}</a-tag>
+              </template>
+
+              <template #allocation_status="{ record }">
+                <a-tag :color="getAllocationStatusColor(record.status)">
+                  {{ getAllocationStatusText(record.status) }}
+                </a-tag>
+              </template>
+
+              <template #created_at="{ record }">
+                {{ formatDate(record.created_at) }}
+              </template>
+
+              <template #updated_at="{ record }">
+                {{ formatDate(record.updated_at) }}
+              </template>
+            </a-table>
+
+            <a-empty v-if="!allocationLoading && allocationList.length === 0" description="暂无任务分配记录" />
+          </a-space>
         </a-tab-pane>
       </a-tabs>
     </a-card>
