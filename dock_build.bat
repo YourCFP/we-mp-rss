@@ -10,9 +10,8 @@ docker stop we-mp-rss
 docker stop we-mp-rss-arm
 docker rm we-mp-rss
 docker rm we-mp-rss-arm
-docker run -d --name we-mp-rss --platform linux/amd64 -p 8002:8001 -v %~dp0:/work -v  %~dp0\data:/app/data %name%
-docker run -d --name we-mp-rss-arm --platform linux/arm64 -p 8003:8001 -v %~dp0:/work -v  %~dp0\data:/app/data %name%
-docker exec -it we-mp-rss /bin/bash
+docker run -d --name we-mp-rss --platform linux/amd64 -p 8002:8001 -v %~dp0:/work -v  %~dp0data:/app/data %name%
+docker run -d --name we-mp-rss-arm --platform linux/arm64 -p 8003:8001 -v %~dp0:/work -v  %~dp0data:/app/data %name%
 docker stop we-mp-rss
 goto :eof
 )
@@ -27,11 +26,11 @@ if errorlevel 1 (
 )
 
 echo 开始构建多架构镜像 (%platform%)... %name%
-REM 先构建并加载本地架构的镜像
-docker buildx build --platform %platform% -t %name%  --load . --progress plain --no-cache
+REM 分别构建 amd64 和 arm64 架构的镜像
+docker buildx build --platform %platform% -t %name% --load . --progress plain --no-cache
 echo 构建完成: %name%
 echo 检查镜像架构信息:
-docker inspect %name%|find "arm64"
+docker inspect %name%|find "Architecture"
 
 REM 获取所有运行中容器的ID并逐个停止
 FOR /f "tokens=*" %%i IN ('docker ps -q') DO docker stop %%i

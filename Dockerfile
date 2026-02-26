@@ -18,4 +18,4 @@ RUN chmod +x install.sh
 RUN chmod +x start.sh
 # 暴露端口
 EXPOSE 8001
-CMD ["bash", "start.sh"]
+CMD ["/app/start.sh"]
