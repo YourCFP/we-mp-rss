@@ -1,6 +1,6 @@
 import uvicorn
 from core.config import cfg
-from core.print import print_warning
+from core.print import print_warning, print_info, print_success
 import threading
 from driver.auth import *
 import os
@@ -11,6 +11,30 @@ if __name__ == '__main__':
     if cfg.args.init=="True":
         import init_sys as init
         init.init()
+    
+    # 启动级联同步服务（如果配置为子节点）
+    cascade_service_started = False
+    cascade_config = cfg.get("cascade", {})
+    if cascade_config.get("enabled", False) and cascade_config.get("node_type") == "child":
+        try:
+            from jobs.cascade_sync import cascade_sync_service
+            import asyncio
+            
+            cascade_sync_service.initialize()
+            if cascade_sync_service.sync_enabled:
+                # 在后台线程启动同步服务
+                def run_sync():
+                    asyncio.run(cascade_sync_service.start_periodic_sync())
+                
+                sync_thread = threading.Thread(target=run_sync, daemon=True)
+                sync_thread.start()
+                cascade_service_started = True
+                print_success("级联同步服务已启动")
+        except Exception as e:
+            print_warning(f"启动级联同步服务失败: {str(e)}")
+    else:
+        print_info("级联模式未启用或当前节点为父节点")
+    
     if  cfg.args.job =="True" and cfg.get("server.enable_job",False):
         from jobs import start_all_task
         threading.Thread(target=start_all_task,daemon=False).start()

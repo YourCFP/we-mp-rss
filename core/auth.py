@@ -14,6 +14,7 @@ from passlib.context import CryptContext
 import json
 import secrets
 import hashlib
+from core.models.cascade_node import CascadeNode
 
 DB=db.Db(tag="用户连接")
 SECRET_KEY = cfg.get("secret","csol2025")  # 生产环境应使用更安全的密钥
@@ -358,10 +359,10 @@ def authenticate_ak(access_key: str, secret_key: str) -> Optional[dict]:
 
 async def get_current_user_or_ak(request: Request, token: str = Depends(oauth2_scheme)):
     """
-    通用认证函数，支持 JWT Token 和 AK/SK 认证
+    通用认证函数，支持 JWT Token、AK/SK 认证和级联节点认证
     
     优先级:
-    1. Authorization 头中的 AK/SK (格式: "AK-SK ak_value:sk_value")
+    1. Authorization 头中的 AK/SK (格式: "AK-SK ak_value:sk_value") - 用户AK或级联节点AK
     2. Bearer Token (JWT)
     """
     # 检查 AK/SK 认证
@@ -371,6 +372,18 @@ async def get_current_user_or_ak(request: Request, token: str = Depends(oauth2_s
             credentials = auth_header[6:].strip()
             if ':' in credentials:
                 ak, sk = credentials.split(':', 1)
+                
+                # 1. 尝试级联节点认证
+                node = authenticate_cascade_node(ak, sk)
+                if node:
+                    return {
+                        "username": f"node_{node.name}",
+                        "node_id": node.id,
+                        "role": "cascade_node",
+                        "auth_type": "cascade_node"
+                    }
+                
+                # 2. 尝试用户AK认证
                 user_info = authenticate_ak(ak, sk)
                 if user_info:
                     return user_info
@@ -506,5 +519,39 @@ def update_ak(ak_id: str, **kwargs) -> bool:
         from core.print import print_error
         print_error(f"更新Access Key错误: {str(e)}")
         return False
+    finally:
+        session.close()
+
+
+def authenticate_cascade_node(api_key: str, secret_key: str) -> Optional[CascadeNode]:
+    """
+    验证级联节点 AK/SK 凭证
+    
+    参数:
+        api_key: 级联节点的 API Key
+        secret_key: 级联节点的 Secret Key
+    
+    返回: 级联节点对象或 None
+    """
+    session = DB.get_session()
+    try:
+        secret_hash = hashlib.sha256(secret_key.encode()).hexdigest()
+        
+        node = session.query(CascadeNode).filter(
+            CascadeNode.api_key == api_key,
+            CascadeNode.api_secret_hash == secret_hash,
+            CascadeNode.is_active == True
+        ).first()
+        
+        if node:
+            # 更新最后使用时间
+            node.last_used_at = datetime.utcnow()
+            session.commit()
+        
+        return node
+    except Exception as e:
+        from core.print import print_error
+        print_error(f"验证级联节点凭证错误: {str(e)}")
+        return None
     finally:
         session.close()

@@ -10,5 +10,7 @@ from .message_task import MessageTask
 from .config_management import ConfigManagement
 # 导入Access Key模型
 from .access_key import AccessKey
+# 导入级联节点模型
+from .cascade_node import CascadeNode, CascadeSyncLog
 # 导入基础模型
 from .base import *

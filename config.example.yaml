@@ -141,3 +141,20 @@ site:
   name: ${SITE_NAME:-WeRss}
   description: ${SITE_DESCRIPTION:-A WeChat Official Account RSS Reader}
   keywords: ${SITE_KEYWORDS:-}
+
+# 级联配置（支持父子节点架构）
+cascade:
+  # 是否启用级联模式
+  enabled: ${CASCADE_ENABLED:-False}
+  # 节点类型: parent(父节点) 或 child(子节点)
+  node_type: ${CASCADE_NODE_TYPE:-parent}
+  # 父节点API地址 (子节点配置)
+  parent_api_url: ${CASCADE_PARENT_URL:-}
+  # 子节点API密钥 (子节点连接父节点使用)
+  api_key: ${CASCADE_API_KEY:-}
+  # 子节点密钥 (子节点连接父节点使用)
+  api_secret: ${CASCADE_API_SECRET:-}
+  # 数据同步间隔 (秒) 默认300秒(5分钟)
+  sync_interval: ${CASCADE_SYNC_INTERVAL:-300}
+  # 心跳间隔 (秒) 默认60秒
+  heartbeat_interval: ${CASCADE_HEARTBEAT_INTERVAL:-60}

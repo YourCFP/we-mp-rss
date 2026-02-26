@@ -19,6 +19,7 @@ from apis.tags import router as tags_router
 from apis.export import router as export_router
 from apis.tools import router as tools_router
 from apis.github_update import router as github_router
+from apis.cascade import router as cascade_router
 from views import router as views_router
 import apis
 import os
@@ -89,6 +90,7 @@ api_router.include_router(tags_router)
 api_router.include_router(export_router)
 api_router.include_router(tools_router)
 api_router.include_router(github_router)
+api_router.include_router(cascade_router)
 
 resource_router = APIRouter(prefix="/static")
 resource_router.include_router(res_router)
