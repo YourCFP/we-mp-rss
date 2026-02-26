@@ -539,7 +539,7 @@ async def get_pending_tasks(
         ]
         
         if not allocations:
-            return success_response({"data": None}, "暂无待处理任务")
+            return success_response(None, "暂无待处理任务")
         
         # 取第一个分配
         allocation = allocations[0]

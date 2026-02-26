@@ -274,7 +274,7 @@ class CascadeSyncService:
                     print_error(f"定期同步出错: {str(e)}")
                 
                 # 等待下次同步
-                await asyncio.sleep(self.sync_interval)
+                await asyncio.sleep(int(self.sync_interval))
         except asyncio.CancelledError:
             print_info("定期同步服务已停止")
     

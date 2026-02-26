@@ -377,8 +377,8 @@ async def get_current_user_or_ak(request: Request, token: str = Depends(oauth2_s
                 node = authenticate_cascade_node(ak, sk)
                 if node:
                     return {
-                        "username": f"node_{node.name}",
-                        "node_id": node.id,
+                        "username": f"node_{node['name']}",
+                        "node_id": node['id'],
                         "role": "cascade_node",
                         "auth_type": "cascade_node"
                     }
@@ -523,7 +523,7 @@ def update_ak(ak_id: str, **kwargs) -> bool:
         session.close()
 
 
-def authenticate_cascade_node(api_key: str, secret_key: str) -> Optional[CascadeNode]:
+def authenticate_cascade_node(api_key: str, secret_key: str) -> Optional[dict]:
     """
     验证级联节点 AK/SK 凭证
     
@@ -531,11 +531,15 @@ def authenticate_cascade_node(api_key: str, secret_key: str) -> Optional[Cascade
         api_key: 级联节点的 API Key
         secret_key: 级联节点的 Secret Key
     
-    返回: 级联节点对象或 None
+    返回: 级联节点信息字典或 None
     """
+    from core.print import print_info, print_error
     session = DB.get_session()
     try:
         secret_hash = hashlib.sha256(secret_key.encode()).hexdigest()
+        
+        print_info(f"[级联认证] AK: {api_key}")
+        print_info(f"[级联认证] SK Hash: {secret_hash}")
         
         node = session.query(CascadeNode).filter(
             CascadeNode.api_key == api_key,
@@ -544,14 +548,33 @@ def authenticate_cascade_node(api_key: str, secret_key: str) -> Optional[Cascade
         ).first()
         
         if node:
-            # 更新最后使用时间
-            node.last_used_at = datetime.utcnow()
+            print_info(f"[级联认证] 找到节点: {node.name}")
+            # 更新最后心跳时间
+            node.last_heartbeat_at = datetime.utcnow()
             session.commit()
+            
+            # 在 session 关闭前提取数据
+            return {
+                "id": node.id,
+                "name": node.name,
+                "node_type": node.node_type
+            }
+        else:
+            print_error(f"[级联认证] 未找到匹配节点")
+            # 调试：列出所有节点
+            all_nodes = session.query(CascadeNode).filter(
+                CascadeNode.api_key == api_key
+            ).all()
+            print_info(f"[级联认证] AK 匹配的节点数: {len(all_nodes)}")
+            for n in all_nodes:
+                print_info(f"[级联认证] 节点: {n.name}, active={n.is_active}, hash={n.api_secret_hash}")
         
-        return node
+        return None
     except Exception as e:
         from core.print import print_error
         print_error(f"验证级联节点凭证错误: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return None
     finally:
         session.close()

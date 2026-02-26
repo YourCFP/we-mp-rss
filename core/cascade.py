@@ -266,10 +266,35 @@ class CascadeClient:
     """子节点客户端 - 用于向父节点同步数据"""
     
     def __init__(self, parent_api_url: str, api_key: str, api_secret: str):
-        self.parent_api_url = parent_api_url.rstrip('/')
-        self.api_key = api_key
-        self.api_secret = api_secret
+        # 清理和验证URL
+        self.parent_api_url = self._clean_url(parent_api_url)
+        # 清理 AK/SK 中可能存在的引号
+        self.api_key = api_key.strip().strip('"\'') if api_key else ""
+        self.api_secret = api_secret.strip().strip('"\'') if api_secret else ""
         self.timeout = 30.0
+    
+    def _clean_url(self, url: str) -> str:
+        """清理和验证URL"""
+        if not url:
+            raise ValueError("父节点URL不能为空")
+        
+        # 去除首尾空白和引号
+        url = url.strip().strip('"\'')
+        
+        # 检查是否包含协议
+        if not url.startswith(('http://', 'https://')):
+            # 自动添加http://
+            url = 'http://' + url
+            print_warning(f"URL缺少协议，已自动添加: {url}")
+        
+        # 去除末尾的斜杠
+        url = url.rstrip('/')
+        
+        # 验证URL格式
+        if not url.startswith(('http://', 'https://')):
+            raise ValueError(f"无效的URL格式: {url}")
+        
+        return url
     
     def _get_headers(self) -> dict:
         """获取请求头"""
@@ -324,13 +349,13 @@ class CascadeClient:
     async def pull_feeds(self) -> List[dict]:
         """从父节点拉取公众号数据"""
         print_info("从父节点拉取公众号数据...")
-        result = await self._request("GET", "/api/v1/cascade/feeds")
+        result = await self._request("GET", "/api/v1/wx/cascade/feeds")
         return result.get("data", [])
     
     async def pull_message_tasks(self) -> List[dict]:
         """从父节点拉取消息任务"""
         print_info("从父节点拉取消息任务...")
-        result = await self._request("GET", "/api/v1/cascade/message-tasks")
+        result = await self._request("GET", "/api/v1/wx/cascade/message-tasks")
         return result.get("data", [])
     
     async def report_task_result(
@@ -353,13 +378,13 @@ class CascadeClient:
             "results": results,
             "timestamp": datetime.utcnow().isoformat()
         }
-        result = await self._request("POST", "/api/v1/cascade/report-result", data=data)
+        result = await self._request("POST", "/api/v1/wx/cascade/report-result", data=data)
         return result
     
     async def send_heartbeat(self) -> dict:
         """发送心跳到父节点"""
         try:
-            result = await self._request("POST", "/api/v1/cascade/heartbeat")
+            result = await self._request("POST", "/api/v1/wx/cascade/heartbeat")
             print_info("心跳发送成功")
             return result
         except Exception as e:
@@ -377,8 +402,12 @@ class CascadeClient:
             任务包字典，无任务则返回None
         """
         try:
-            result = await self._request("GET", "/api/v1/cascade/pending-tasks", params={"limit": limit})
-            return result.get("data")
+            result = await self._request("GET", "/api/v1/wx/cascade/pending-tasks", params={"limit": limit})
+            data = result.get("data")
+            # 确保返回有效的任务包（包含task_id）或None
+            if data and isinstance(data, dict) and "task_id" in data:
+                return data
+            return None
         except Exception as e:
             print_error(f"获取待处理任务失败: {str(e)}")
             raise
