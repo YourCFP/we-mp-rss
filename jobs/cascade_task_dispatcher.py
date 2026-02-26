@@ -413,9 +413,14 @@ async def fetch_task_from_parent() -> Optional[dict]:
     """
     from jobs.cascade_sync import cascade_sync_service
     
+    # 如果客户端未初始化，尝试初始化
     if not cascade_sync_service.client:
-        print_warning("级联客户端未初始化")
-        return None
+        print_info("级联客户端未初始化，正在初始化...")
+        cascade_sync_service.initialize()
+        
+        if not cascade_sync_service.client:
+            print_warning("级联客户端初始化失败，请检查配置")
+            return None
     
     try:
         # 使用新的get_pending_tasks方法
@@ -510,10 +515,12 @@ async def execute_parent_task(task_package: dict):
                 })
         
         # 上报结果到父节点
-        await cascade_sync_service.report_task_result(
-            task_data["task_id"],
-            results
-        )
+        from jobs.cascade_sync import cascade_sync_service
+        if cascade_sync_service.client:
+            await cascade_sync_service.report_task_result(
+                task_data["task_id"],
+                results
+            )
         
         print_success(f"任务执行完成: {task_data['task_name']}")
         
@@ -529,6 +536,19 @@ async def start_child_task_worker(poll_interval: int = 30):
         poll_interval: 轮询间隔（秒）
     """
     print_info("启动子节点任务拉取器")
+    
+    # 初始化级联同步服务
+    from jobs.cascade_sync import cascade_sync_service
+    if not cascade_sync_service.client:
+        print_info("初始化级联同步服务...")
+        cascade_sync_service.initialize()
+        
+        if not cascade_sync_service.client:
+            print_error("级联同步服务初始化失败，请检查配置")
+            print_error("请确保 config.yaml 中配置了 cascade 参数")
+            return
+    
+    print_success("子节点任务拉取器启动成功")
     
     while True:
         try:

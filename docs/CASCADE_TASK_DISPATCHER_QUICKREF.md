@@ -27,7 +27,10 @@ cascade:
   api_key: "CNxxxxxxxx"
   api_secret: "CSxxxxxxxx"
 
-# 2. 启动任务拉取器
+# 2. 测试初始化（可选但推荐）
+python test_cascade_init.py
+
+# 3. 启动任务拉取器
 # 方式1: 从项目根目录运行
 python -m jobs.cascade_task_dispatcher child
 
