@@ -365,6 +365,23 @@ class CascadeClient:
         except Exception as e:
             print_error(f"心跳发送失败: {str(e)}")
             raise
+    
+    async def get_pending_tasks(self, limit: int = 1) -> dict:
+        """
+        从父节点获取待处理任务
+        
+        参数:
+            limit: 每次获取的任务数量限制
+        
+        返回:
+            任务包字典，无任务则返回None
+        """
+        try:
+            result = await self._request("GET", "/api/v1/cascade/pending-tasks", params={"limit": limit})
+            return result.get("data")
+        except Exception as e:
+            print_error(f"获取待处理任务失败: {str(e)}")
+            raise
 
 
 # 全局级联管理器实例

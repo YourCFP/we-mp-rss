@@ -4,11 +4,12 @@
 
 WeRSS 级联系统是一个完整的父子节点架构，支持：
 
-✅ 父子节点数据同步  
-✅ 级联AK/SK认证系统  
-✅ 子节点任务执行与结果上报  
-✅ 节点管理和监控  
-✅ 同步日志记录  
+✅ 父子节点数据同步
+✅ 级联AK/SK认证系统
+✅ **智能任务分发**（根据节点空闲情况自动分配）
+✅ 子节点任务执行与结果上报
+✅ 节点管理和监控
+✅ 同步日志记录
 
 ## 架构设计
 
@@ -26,6 +27,7 @@ apis/
 
 jobs/
 ├── cascade_sync.py           # 子节点同步服务
+├── cascade_task_dispatcher.py # 任务分发器（新增）
 └── cascade_init.py          # 初始化脚本
 ```
 
@@ -36,7 +38,7 @@ jobs/
 - `api_key/api_secret`: 认证凭证
 - `parent_id`: 父节点ID
 - `status`: 在线状态
-- `sync_config`: 同步配置
+- `sync_config`: 同步配置（包括容量、配额等）
 
 #### CascadeSyncLog（同步日志表）
 - `operation`: 操作类型
@@ -118,25 +120,28 @@ python main.py
 
 ### 父节点管理接口
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| /cascade/nodes | POST | 创建节点 |
-| /cascade/nodes | GET | 获取节点列表 |
-| /cascade/nodes/{id} | GET | 获取节点详情 |
-| /cascade/nodes/{id} | PUT | 更新节点 |
-| /cascade/nodes/{id} | DELETE | 删除节点 |
-| /cascade/nodes/{id}/credentials | POST | 生成凭证 |
-| /cascade/nodes/{id}/test-connection | POST | 测试连接 |
-| /cascade/sync-logs | GET | 查看同步日志 |
+| 接口 | 方法 | 认证 | 说明 |
+|------|------|------|------|
+| /cascade/nodes | POST | JWT | 创建节点 |
+| /cascade/nodes | GET | JWT | 获取节点列表 |
+| /cascade/nodes/{id} | GET | JWT | 获取节点详情 |
+| /cascade/nodes/{id} | PUT | JWT | 更新节点 |
+| /cascade/nodes/{id} | DELETE | JWT | 删除节点 |
+| /cascade/nodes/{id}/credentials | POST | JWT | 生成凭证 |
+| /cascade/nodes/{id}/test-connection | POST | JWT | 测试连接 |
+| /cascade/sync-logs | GET | JWT | 查看同步日志 |
+| /cascade/dispatch-task | POST | JWT | **触发任务分发** |
+| /cascade/allocations | GET | JWT | **查看任务分配** |
 
 ### 子节点调用接口
 
-| 接口 | 方法 | 说明 |
-|------|------|------|
-| /cascade/feeds | GET | 获取公众号数据 |
-| /cascade/message-tasks | GET | 获取消息任务 |
-| /cascade/report-result | POST | 上报任务结果 |
-| /cascade/heartbeat | POST | 发送心跳 |
+| 接口 | 方法 | 认证 | 说明 |
+|------|------|------|------|
+| /cascade/feeds | GET | 级联AK | 获取公众号 |
+| /cascade/message-tasks | GET | 级联AK | 获取任务 |
+| /cascade/report-result | POST | 级联AK | 上报结果 |
+| /cascade/heartbeat | POST | 级联AK | 发送心跳 |
+| /cascade/pending-tasks | GET | 级联AK | **获取待处理任务** |
 
 ## 配置说明
 
@@ -254,6 +259,7 @@ cascade:
 
 - [快速开始指南](CASCADE_QUICKSTART.md)
 - [完整使用指南](CASCADE_GUIDE.md)
+- **[任务分发系统指南](CASCADE_TASK_DISPATCHER.md)** ⭐
 - [API文档](http://localhost:8001/api/docs)
 
 ## 技术栈
@@ -274,8 +280,8 @@ cascade:
 
 ## 未来扩展
 
-- [ ] 支持父节点任务分发
-- [ ] 支持节点负载均衡
+- [x] 支持父节点任务分发 ✅
+- [x] 支持节点负载均衡 ✅
 - [ ] 支持数据压缩传输
 - [ ] 支持断点续传
 - [ ] 支持节点动态注册

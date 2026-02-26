@@ -492,4 +492,163 @@ async def list_sync_logs(
         return error_response(code=500, message=str(e))
 
 
+# ===== 任务分发接口（父节点专用） =====
+
+@router.get("/pending-tasks", summary="子节点获取待处理任务")
+async def get_pending_tasks(
+    request: Request,
+    node_id: str = Query(None, description="节点ID"),
+    limit: int = Query(1, ge=1, le=10),
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    子节点从父节点获取分配的任务
+    
+    参数:
+        node_id: 子节点ID（从认证信息中获取）
+        limit: 每次获取的任务数量限制
+    """
+    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    
+    session = DB.get_session()
+    try:
+        # 从认证信息中获取节点ID
+        if not node_id:
+            auth_header = request.headers.get("Authorization", "")
+            if auth_header.startswith("AK-SK "):
+                credentials = auth_header[6:].strip()
+                api_key = credentials.split(':')[0] if ':' in credentials else credentials
+                
+                node = session.query(CascadeNode).filter(
+                    CascadeNode.api_key == api_key
+                ).first()
+                if node:
+                    node_id = node.id
+        
+        if not node_id:
+            return error_response(code=400, message="无法确定节点ID")
+        
+        # 查找分配给该节点的待执行任务
+        # 这里需要有一个任务分配表来存储分配关系
+        # 临时实现：返回分配给该节点的任务
+        
+        # 获取节点的分配记录
+        allocations = [
+            alloc for alloc in cascade_task_dispatcher.allocations.values()
+            if alloc.node_id == node_id and alloc.status == "pending"
+        ]
+        
+        if not allocations:
+            return success_response({"data": None}, "暂无待处理任务")
+        
+        # 取第一个分配
+        allocation = allocations[0]
+        allocation.status = "executing"
+        allocation.updated_at = datetime.utcnow()
+        
+        # 获取任务详情
+        task = session.query(MessageTask).filter(
+            MessageTask.id == allocation.task_id
+        ).first()
+        
+        if not task:
+            return error_response(code=404, message="任务不存在")
+        
+        # 获取公众号列表
+        feeds = session.query(Feed).filter(
+            Feed.id.in_(allocation.feed_ids)
+        ).all()
+        
+        # 创建任务包
+        task_package = cascade_task_dispatcher.create_task_package(task, feeds)
+        
+        # 添加分配ID，用于上报结果
+        task_package["allocation_id"] = allocation.allocation_id
+        
+        return success_response(task_package, "获取任务成功")
+        
+    except Exception as e:
+        print_error(f"获取待处理任务失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/dispatch-task", summary="手动触发任务分发")
+async def dispatch_tasks(
+    task_id: Optional[str] = Query(None, description="任务ID，不指定则分发所有任务"),
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    手动触发任务分发（父节点使用）
+    
+    将任务分配给各个在线的子节点
+    """
+    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    
+    try:
+        # 刷新节点状态
+        cascade_task_dispatcher.refresh_node_statuses()
+        
+        # 执行分发
+        import asyncio
+        await cascade_task_dispatcher.execute_dispatch(task_id)
+        
+        return success_response(message="任务分发完成")
+        
+    except Exception as e:
+        print_error(f"任务分发失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.get("/allocations", summary="查看任务分配情况")
+async def get_allocations(
+    task_id: Optional[str] = Query(None),
+    node_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    limit: int = Query(50, ge=1, le=200),
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    查看任务分配情况
+    
+    参数:
+        task_id: 按任务ID筛选
+        node_id: 按节点ID筛选
+        status: 按状态筛选 (pending, executing, completed, failed)
+    """
+    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    
+    try:
+        allocations = list(cascade_task_dispatcher.allocations.values())
+        
+        if task_id:
+            allocations = [a for a in allocations if a.task_id == task_id]
+        if node_id:
+            allocations = [a for a in allocations if a.node_id == node_id]
+        if status:
+            allocations = [a for a in allocations if a.status == status]
+        
+        # 分页
+        total = len(allocations)
+        allocations = allocations[:limit]
+        
+        allocation_list = [alloc.to_dict() for alloc in allocations]
+        
+        # 添加节点名称
+        session = DB.get_session()
+        for alloc_data in allocation_list:
+            node = session.query(CascadeNode).filter(
+                CascadeNode.id == alloc_data["node_id"]
+            ).first()
+            if node:
+                alloc_data["node_name"] = node.name
+        
+        return success_response({
+            "list": allocation_list,
+            "total": total
+        })
+        
+    except Exception as e:
+        return error_response(code=500, message=str(e))
+
+
 from datetime import datetime
