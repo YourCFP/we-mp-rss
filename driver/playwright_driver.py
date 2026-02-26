@@ -9,6 +9,8 @@ import uuid
 import asyncio
 from socket import timeout
 
+from core.print import print_error
+
 # 设置环境变量
 browsers_name = os.getenv("BROWSER_TYPE", "firefox")
 browsers_path = os.getenv("PLAYWRIGHT_BROWSERS_PATH", "")
@@ -122,9 +124,8 @@ class PlaywrightController:
             self.isClose = False
             return self.page
         except Exception as e:
-            print(f"浏览器启动失败: {str(e)}")
-            tips="Docker环境;您可以设置环境变量INSTALL=True并重启Docker自动安装浏览器环境;如需要切换浏览器可以设置环境变量BROWSER_TYPE=firefox 支持(firefox,webkit,chromium),开发环境请手工安装"
-            print(tips)
+            tips=f"{str(e)}\nDocker环境;您可以设置环境变量INSTALL=True并重启Docker自动安装浏览器环境;如需要切换浏览器可以设置环境变量BROWSER_TYPE=firefox 支持(firefox,webkit,chromium),开发环境请手工安装"
+            print_error(tips)
             self.cleanup()
             raise Exception(tips)
         
