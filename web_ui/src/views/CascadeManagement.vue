@@ -119,8 +119,25 @@ const fetchAllocations = async () => {
 const handleDispatchTask = async () => {
   try {
     dispatching.value = true
-    await dispatchTask()
-    Message.success('任务分发成功')
+    const res = await dispatchTask()
+    
+    // 显示详细结果
+    if (res) {
+      const { online_nodes, task_count, tasks, allocations_created } = res
+      
+      if (online_nodes === 0) {
+        Message.warning('没有在线的子节点，请确保子节点已启动并连接')
+      } else if (task_count === 0) {
+        Message.warning('没有可分发的任务。请先创建消息任务并关联公众号')
+      } else if (allocations_created === 0) {
+        Message.warning(`发现 ${task_count} 个任务，但没有创建分配。可能是任务没有关联公众号或节点容量不足`)
+      } else {
+        Message.success(`分发成功：${allocations_created} 个分配已创建，涉及 ${task_count} 个任务`)
+      }
+      
+      console.log('分发结果:', res)
+    }
+    
     fetchAllocations()
   } catch (err) {
     Message.error('任务分发失败: ' + (err instanceof Error ? err.message : '未知错误'))

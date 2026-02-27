@@ -27,14 +27,14 @@ class CascadeSyncService:
         
         # 检查是否启用了级联模式
         cascade_config = cfg.get("cascade", {})
-        if not cascade_config.get("enabled", False):
+        if not cfg.get("cascade.enabled", False):
             print_warning("级联模式未启用")
             return
         
         # 获取父节点配置
-        parent_url = cascade_config.get("parent_api_url")
-        api_key = cascade_config.get("api_key")
-        api_secret = cascade_config.get("api_secret")
+        parent_url = str(cfg.get("cascade.parent_api_url"))
+        api_key = str(cfg.get("cascade.api_key"))
+        api_secret = str(cfg.get("cascade.api_secret"))
         
         if not all([parent_url, api_key, api_secret]):
             print_warning("级联配置不完整，请检查配置文件")
@@ -250,11 +250,11 @@ class CascadeSyncService:
         # 1. 发送心跳
         await self.send_heartbeat()
         
-        # 2. 同步公众号
-        await self.sync_feeds()
+        # # 2. 同步公众号
+        # await self.sync_feeds()
         
-        # 3. 同步消息任务
-        await self.sync_message_tasks()
+        # # 3. 同步消息任务
+        # await self.sync_message_tasks()
         
         print_success("完整同步完成")
     

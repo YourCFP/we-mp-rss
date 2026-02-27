@@ -140,5 +140,10 @@ export const dispatchTask = (taskId?: string) => {
   const url = taskId 
     ? `/wx/cascade/dispatch-task?task_id=${taskId}`
     : '/wx/cascade/dispatch-task'
-  return http.post(url)
+  return http.post<{
+    online_nodes: number
+    task_count: number
+    tasks: Array<{ id: string; name: string; mp_count: number }>
+    allocations_created: number
+  }>(url)
 }

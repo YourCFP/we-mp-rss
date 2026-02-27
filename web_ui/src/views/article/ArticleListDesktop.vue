@@ -447,10 +447,9 @@ import { watch } from 'vue'
 watch(issourceUrl, (newValue) => {
   localStorage.setItem('issourceUrl', newValue.toString())
 }, { immediate: false })
-const handlePageChange = (page: number, pageSize: number) => {
-  console.log('分页事件触发:', { page, pageSize })
+const handlePageChange = (page: number) => {
+  console.log('分页事件触发:', { page })
   pagination.value.current = page
-  pagination.value.pageSize = pageSize
   fetchArticles()
 }
 

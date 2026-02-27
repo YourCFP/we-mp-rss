@@ -586,16 +586,41 @@ async def dispatch_tasks(
     
     try:
         # 刷新节点状态
-        cascade_task_dispatcher.refresh_node_statuses()
+        online_count = cascade_task_dispatcher.refresh_node_statuses()
+        
+        # 检查任务数量
+        session = DB.get_session()
+        query = session.query(MessageTask).filter(MessageTask.status == 0)
+        if task_id:
+            query = query.filter(MessageTask.id == task_id)
+        tasks = query.all()
+        
+        task_info = []
+        for task in tasks:
+            mps_list = json.loads(task.mps_id) if task.mps_id else []
+            task_info.append({
+                "id": task.id,
+                "name": task.name,
+                "mp_count": len(mps_list)
+            })
         
         # 执行分发
-        import asyncio
         await cascade_task_dispatcher.execute_dispatch(task_id)
         
-        return success_response(message="任务分发完成")
+        # 获取分配数量
+        allocation_count = len(cascade_task_dispatcher.allocations)
+        
+        return success_response({
+            "online_nodes": online_count,
+            "task_count": len(tasks),
+            "tasks": task_info,
+            "allocations_created": allocation_count
+        }, "任务分发完成")
         
     except Exception as e:
         print_error(f"任务分发失败: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return error_response(code=500, message=str(e))
 
 
