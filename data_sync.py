@@ -189,6 +189,49 @@ class DatabaseSynchronizer:
         except Exception as e:
             self.logger.warning(f"迁移 {table_name} 表时出错: {e}")
     
+    def _migrate_articles_updated_at_millis(self):
+        """
+        迁移 articles 表：将 updated_at_millis 从 INT 改为 BIGINT
+        解决毫秒时间戳超出 INT 范围的问题
+        """
+        from sqlalchemy import text
+        table_name = 'articles'
+        
+        try:
+            inspector = inspect(self.engine)
+            if not inspector.has_table(table_name):
+                return  # 表不存在，无需迁移
+            
+            columns = {c["name"]: c for c in inspector.get_columns(table_name)}
+            col_info = columns.get("updated_at_millis")
+            
+            if not col_info:
+                return  # 列不存在
+            
+            # 检查是否已经是 BIGINT
+            col_type = str(col_info.get("type", "")).upper()
+            if "BIGINT" in col_type or "BIG" in col_type:
+                self.logger.info(f"{table_name}.updated_at_millis 已是 BIGINT，跳过迁移")
+                return
+            
+            self.logger.info(f"开始迁移 {table_name} 表，将 updated_at_millis 改为 BIGINT...")
+            
+            with self.engine.begin() as conn:
+                if "mysql" in self.db_url:
+                    # MySQL 直接修改列类型
+                    conn.execute(text(f"ALTER TABLE {table_name} MODIFY COLUMN updated_at_millis BIGINT"))
+                    self.logger.info(f"{table_name}.updated_at_millis 已改为 BIGINT")
+                elif "postgresql" in self.db_url or "postgres" in self.db_url:
+                    # PostgreSQL
+                    conn.execute(text(f'ALTER TABLE "{table_name}" ALTER COLUMN updated_at_millis TYPE BIGINT'))
+                    self.logger.info(f"{table_name}.updated_at_millis 已改为 BIGINT")
+                else:
+                    # SQLite 不支持 ALTER COLUMN，跳过（新表会自动使用正确类型）
+                    self.logger.info(f"SQLite 不支持 ALTER COLUMN，跳过迁移")
+            
+        except Exception as e:
+            self.logger.warning(f"迁移 {table_name}.updated_at_millis 时出错: {e}")
+    
     def sync(self):
         """同步模型到数据库"""
         try:
@@ -206,6 +249,9 @@ class DatabaseSynchronizer:
             # SQLite 特殊迁移：修改 node_id 为 nullable
             if "sqlite" in self.db_url:
                 self._migrate_cascade_task_allocations()
+            
+            # MySQL/PostgreSQL 迁移：修改 updated_at_millis 为 BIGINT
+            self._migrate_articles_updated_at_millis()
             
             # 处理不同数据库的特殊类型映射
             for model in self.models.values():

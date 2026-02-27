@@ -13,7 +13,7 @@ class ArticleBase(Base):
     status = Column(Integer,default=1)
     publish_time = Column(BigInteger,index=True)
     created_at = Column(DateTime)
-    updated_at = Column(DateTime)  
+    updated_at = Column(BigInteger)  
     updated_at_millis = Column(BigInteger)  
     is_export = Column(Integer)
     is_read = Column(Integer, default=0)
