@@ -101,10 +101,8 @@ def test_Gather_Article():
         ]
     for url in urls:
         content= ga.content_extract(url)
-        print(content)
-        
-
-
+        content1 = Web.clean_article_content(content)
+        print(len(content),len(content1))
 def test_screenshot():
     from playwright.sync_api import sync_playwright,TimeoutError
     playwright=sync_playwright().start()
@@ -183,11 +181,11 @@ if __name__=="__main__":
     # asyncio.run(test_Article())
     # test_Gather_Article()
     # testWx_Api()
-    # test_fetch_articles_without_content()
+    test_fetch_articles_without_content()
     # testWeb()
     # testNotice()
     # testMd2Doc()
-    testLogin()
+    # testLogin()
     # test_feed_and_articles_template()
     # testJob()
     # test_send_wx_code()

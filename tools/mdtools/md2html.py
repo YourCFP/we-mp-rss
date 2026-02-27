@@ -8,6 +8,8 @@ from markdown.extensions import codehilite, tables, toc, fenced_code
 from bs4 import BeautifulSoup
 import re
 from typing import Dict, List, Optional, Any
+
+from pyee.cls import on
 from core.print import print_info, print_error, print_warning
 
 
@@ -43,6 +45,7 @@ class MarkdownToHtmlConverter:
         ]
         
         # 设置默认配置
+        self.only_body = self.config.get('only_body', True)
         self.extensions = self.config.get('extensions', self.default_extensions)
         self.remove_images = self.config.get('remove_images', False)
         self.remove_links = self.config.get('remove_links', False)
@@ -119,7 +122,7 @@ class MarkdownToHtmlConverter:
             
             html_content = md.convert(markdown_content)
             html_content = self._post_process_html(html_content)
-            html_content = self._wrap_html(html_content)
+            html_content = self._wrap_html(html_content,only_body=self.only_body)
             
             # 提取元数据
             metadata = {
@@ -246,7 +249,7 @@ class MarkdownToHtmlConverter:
             if not img.get('loading'):
                 img['loading'] = 'lazy'
     
-    def _wrap_html(self, html_content: str) -> str:
+    def _wrap_html(self, html_content: str,only_body:bool=True) -> str:
         """
         包装 HTML 内容，添加完整的 HTML 结构
         
@@ -256,6 +259,8 @@ class MarkdownToHtmlConverter:
         Returns:
             完整的 HTML 文档
         """
+        if only_body:
+            return html_content
         css_styles = self._get_default_css()
         if self.custom_css:
             css_styles += '\n' + self.custom_css

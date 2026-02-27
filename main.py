@@ -40,7 +40,7 @@ if __name__ == '__main__':
         from jobs.cascade_task_dispatcher import cascade_schedule_service
         cascade_schedule_service.start()
 
-    if  cfg.args.job =="True" and cfg.get("server.enable_job",False) and  cascade_service_started:
+    if  cfg.args.job =="True" and cfg.get("server.enable_job",False):
         from jobs import start_all_task
         threading.Thread(target=start_all_task,daemon=False).start()
     else:

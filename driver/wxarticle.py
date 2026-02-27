@@ -62,13 +62,13 @@ class WXArticleFetcher:
                             dt = dt.replace(year=current_year - 1)
                     else:
                         dt = datetime.strptime(publish_time_str, fmt)
-                    return int(dt.timestamp() * 1000)
+                    return int(dt.timestamp())
                 except ValueError:
                     continue
             
             # 如果所有格式都失败，返回当前时间戳
             print_warning(f"无法解析时间格式: {publish_time_str}，使用当前时间")
-            return int(datetime.now().timestamp() * 1000)
+            return int(datetime.now().timestamp())
             
         except Exception as e:
             print_error(f"时间转换失败: {e}")

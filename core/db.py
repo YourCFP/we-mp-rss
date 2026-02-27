@@ -120,9 +120,8 @@ class Db:
             art.content=art.content
 
             if art.content_html is None:
-                from tools.html import htmltools
-                from driver.wxarticle import Web
-                art.content_html = Web.clean_article_content(art.content)
+                from tools.fix import fix_html
+                art.content_html = fix_html(art.content)
             from core.models.base import DATA_STATUS
             art.status=DATA_STATUS.ACTIVE
             session.add(art)

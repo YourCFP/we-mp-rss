@@ -1,5 +1,6 @@
 from core.models.article import Article,DATA_STATUS
 import core.db as db
+from tools.fix import fix_html
 from core.wait import Wait
 from core.wx.base import WxGather
 from time import sleep
@@ -39,7 +40,7 @@ def fetch_articles_without_content():
             if content:
                 # 更新内容
                 article.content = content
-                article.content_html = Web.clean_article_content(content)
+                article.content_html =fix_html(content)
                 if  content=="DELETED":
                     print_error(f"获取文章 {article.title} 内容已被发布者删除")
                     article.status = DATA_STATUS.DELETED
