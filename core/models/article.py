@@ -28,6 +28,7 @@ class Article(ArticleBase):
             'pic_url': self.pic_url,
             'url': self.url,
             'description': self.description,
+            'content': self.content,
             'content_html': self.content_html,
             'status': self.status,
             'publish_time': self.publish_time,

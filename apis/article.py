@@ -199,7 +199,6 @@ async def get_article_detail(
     try:
         article = session.query(Article).filter(Article.id==article_id).filter(Article.status != DATA_STATUS.DELETED).first()
         if not article:
-            from .base import error_response
             raise HTTPException(
                 status_code=fast_status.HTTP_404_NOT_FOUND,
                 detail=error_response(
