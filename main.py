@@ -14,8 +14,7 @@ if __name__ == '__main__':
     
     # 启动级联同步服务（如果配置为子节点）
     cascade_service_started = False
-    cascade_config = cfg.get("cascade", {})
-    if cascade_config.get("enabled", False) and cascade_config.get("node_type") == "child":
+    if cfg.get("cascade.enabled", False) and cfg.get("cascade.node_type") == "child":
         try:
             from jobs.cascade_sync import cascade_sync_service
             import asyncio
@@ -35,6 +34,12 @@ if __name__ == '__main__':
     else:
         print_info("级联模式未启用或当前节点为父节点")
     
+
+    print_info("启动网关定时调度服务")
+    import asyncio
+    from jobs.cascade_task_dispatcher import cascade_schedule_service
+    cascade_schedule_service.start()
+
     if  cfg.args.job =="True" and cfg.get("server.enable_job",False):
         from jobs import start_all_task
         threading.Thread(target=start_all_task,daemon=False).start()

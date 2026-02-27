@@ -147,3 +147,54 @@ export const dispatchTask = (taskId?: string) => {
     allocations_created: number
   }>(url)
 }
+
+// 公众号状态相关接口
+
+export interface FeedStatus {
+  id: string
+  mp_name: string
+  mp_cover?: string
+  status: number
+  article_count: number
+  latest_article_time?: string
+  update_status: string  // fresh, recent, stale, outdated, unknown
+  update_time?: number
+  sync_time?: number
+  last_task?: {
+    status: string
+    time?: string
+    node_id?: string
+    node_name?: string
+  }
+  created_at?: string
+  updated_at?: string
+}
+
+export interface FeedStatusResponse {
+  list: FeedStatus[]
+  total: number
+  page: {
+    limit: number
+    offset: number
+  }
+}
+
+// 获取公众号更新状态
+export const getFeedStatus = (params?: { feed_id?: string; limit?: number; offset?: number }) => {
+  return http.get<FeedStatusResponse>('/wx/cascade/feed-status', { params })
+}
+
+// 待认领任务统计
+
+export interface PendingAllocationsStats {
+  pending_tasks: number      // 待认领任务数
+  executing_tasks: number    // 执行中任务数
+  completed_today: number    // 今日完成数
+  failed_today: number       // 今日失败数
+  online_nodes: number       // 在线节点数
+}
+
+// 获取待认领任务统计
+export const getPendingAllocations = () => {
+  return http.get<PendingAllocationsStats>('/wx/cascade/pending-allocations')
+}

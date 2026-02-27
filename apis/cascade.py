@@ -61,6 +61,35 @@ class ReportResultRequest(BaseModel):
     timestamp: str
 
 
+class ClaimTaskRequest(BaseModel):
+    """认领任务请求（无需参数，从认证信息获取节点ID）"""
+    pass
+
+
+class UpdateTaskStatusRequest(BaseModel):
+    """更新任务状态请求"""
+    allocation_id: str
+    status: str
+    error_message: Optional[str] = None
+    timestamp: str
+
+
+class UploadArticlesRequest(BaseModel):
+    """上行文章数据请求"""
+    allocation_id: str
+    articles: List[dict]
+    timestamp: str
+
+
+class ReportCompletionRequest(BaseModel):
+    """上报任务完成请求"""
+    allocation_id: str
+    task_id: str
+    results: List[dict]
+    article_count: int
+    timestamp: str
+
+
 # ===== 节点管理接口 =====
 
 @router.post("/nodes", summary="创建级联节点")
@@ -494,7 +523,7 @@ async def list_sync_logs(
 
 # ===== 任务分发接口（父节点专用） =====
 
-@router.get("/pending-tasks", summary="子节点获取待处理任务")
+@router.get("/pending-tasks", summary="子节点获取待处理任务（旧接口，建议使用claim-task）")
 async def get_pending_tasks(
     request: Request,
     node_id: str = Query(None, description="节点ID"),
@@ -502,11 +531,9 @@ async def get_pending_tasks(
     current_user: dict = Depends(get_current_user_or_ak)
 ):
     """
-    子节点从父节点获取分配的任务
+    子节点从父节点获取分配的任务（旧接口）
     
-    参数:
-        node_id: 子节点ID（从认证信息中获取）
-        limit: 每次获取的任务数量限制
+    建议使用 POST /claim-task 接口，支持任务互斥
     """
     from jobs.cascade_task_dispatcher import cascade_task_dispatcher
     
@@ -528,47 +555,231 @@ async def get_pending_tasks(
         if not node_id:
             return error_response(code=400, message="无法确定节点ID")
         
-        # 查找分配给该节点的待执行任务
-        # 这里需要有一个任务分配表来存储分配关系
-        # 临时实现：返回分配给该节点的任务
+        # 使用新的认领任务方法
+        task_package = cascade_task_dispatcher.claim_task_for_node(node_id)
         
-        # 获取节点的分配记录
-        allocations = [
-            alloc for alloc in cascade_task_dispatcher.allocations.values()
-            if alloc.node_id == node_id and alloc.status == "pending"
-        ]
-        
-        if not allocations:
+        if not task_package:
             return success_response(None, "暂无待处理任务")
-        
-        # 取第一个分配
-        allocation = allocations[0]
-        allocation.status = "executing"
-        allocation.updated_at = datetime.utcnow()
-        
-        # 获取任务详情
-        task = session.query(MessageTask).filter(
-            MessageTask.id == allocation.task_id
-        ).first()
-        
-        if not task:
-            return error_response(code=404, message="任务不存在")
-        
-        # 获取公众号列表
-        feeds = session.query(Feed).filter(
-            Feed.id.in_(allocation.feed_ids)
-        ).all()
-        
-        # 创建任务包
-        task_package = cascade_task_dispatcher.create_task_package(task, feeds)
-        
-        # 添加分配ID，用于上报结果
-        task_package["allocation_id"] = allocation.allocation_id
         
         return success_response(task_package, "获取任务成功")
         
     except Exception as e:
         print_error(f"获取待处理任务失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/claim-task", summary="子节点认领任务（原子操作，支持互斥）")
+async def claim_task(
+    request: Request,
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    子节点认领任务（原子操作，支持任务互斥）
+    
+    使用数据库事务确保同一时间只有一个节点能获取同一任务。
+    子节点收到任务后，其他节点不能再收到该任务。
+    
+    需要级联认证（AK/SK）
+    """
+    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    from core.models.cascade_task_allocation import CascadeTaskAllocation
+    
+    session = DB.get_session()
+    try:
+        # 从认证信息中获取节点ID
+        node_id = None
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("AK-SK "):
+            credentials = auth_header[6:].strip()
+            api_key = credentials.split(':')[0] if ':' in credentials else credentials
+            
+            node = session.query(CascadeNode).filter(
+                CascadeNode.api_key == api_key
+            ).first()
+            if node:
+                node_id = node.id
+        
+        if not node_id:
+            return error_response(code=400, message="无法确定节点ID")
+        
+        # 使用原子操作认领任务
+        task_package = cascade_task_dispatcher.claim_task_for_node(node_id)
+        
+        if not task_package:
+            return success_response(None, "暂无待处理任务")
+        
+        return success_response(task_package, "认领任务成功")
+        
+    except Exception as e:
+        print_error(f"认领任务失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.put("/task-status", summary="更新任务分配状态")
+async def update_task_status(
+    req: UpdateTaskStatusRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    子节点更新任务分配状态
+    
+    参数:
+        allocation_id: 分配记录ID
+        status: 状态 (executing, completed, failed)
+        error_message: 错误信息（可选）
+    """
+    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    
+    try:
+        success = cascade_task_dispatcher.update_allocation_status(
+            allocation_id=req.allocation_id,
+            status=req.status,
+            error_message=req.error_message
+        )
+        
+        if not success:
+            return error_response(code=404, message="分配记录不存在")
+        
+        return success_response(message="状态更新成功")
+        
+    except Exception as e:
+        print_error(f"更新任务状态失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/upload-articles", summary="子节点上行文章数据到网关")
+async def upload_articles(
+    req: UploadArticlesRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    子节点上行文章数据到网关
+    
+    子节点执行抓取任务后，将文章数据上传到父节点保存。
+    
+    参数:
+        allocation_id: 任务分配ID
+        articles: 文章列表
+    """
+    from core.models.article import Article
+    from core.models.cascade_task_allocation import CascadeTaskAllocation
+    
+    session = DB.get_session()
+    try:
+        # 验证分配记录
+        allocation = session.query(CascadeTaskAllocation).filter(
+            CascadeTaskAllocation.id == req.allocation_id
+        ).first()
+        
+        if not allocation:
+            return error_response(code=404, message="分配记录不存在")
+        
+        # 保存文章到数据库
+        new_count = 0
+        for article_data in req.articles:
+            # 检查文章是否已存在
+            existing = session.query(Article).filter(
+                Article.id == article_data.get("id")
+            ).first()
+            
+            if not existing:
+                # 创建新文章
+                article = Article(
+                    id=article_data.get("id"),
+                    mp_id=article_data.get("mp_id"),
+                    title=article_data.get("title"),
+                    pic_url=article_data.get("pic_url"),
+                    url=article_data.get("url"),
+                    description=article_data.get("description"),
+                    content=article_data.get("content"),
+                    status=article_data.get("status", 1),
+                    publish_time=article_data.get("publish_time"),
+                    created_at=datetime.utcnow(),
+                    updated_at=datetime.utcnow()
+                )
+                session.add(article)
+                new_count += 1
+            else:
+                # 更新现有文章
+                existing.title = article_data.get("title", existing.title)
+                existing.content = article_data.get("content", existing.content)
+                existing.updated_at = datetime.utcnow()
+        
+        # 更新分配记录的文章统计
+        allocation.article_count = len(req.articles)
+        allocation.new_article_count = new_count
+        
+        session.commit()
+        
+        print_success(f"接收文章数据: {len(req.articles)}篇, 新增{new_count}篇")
+        
+        return success_response({
+            "received": len(req.articles),
+            "new_count": new_count
+        }, "文章数据上行成功")
+        
+    except Exception as e:
+        session.rollback()
+        print_error(f"上行文章数据失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/report-completion", summary="子节点上报任务完成")
+async def report_completion(
+    req: ReportCompletionRequest,
+    request: Request,
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    子节点上报任务完成结果
+    
+    参数:
+        allocation_id: 分配记录ID
+        task_id: 任务ID
+        results: 执行结果列表
+        article_count: 文章数量
+    """
+    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    
+    try:
+        # 更新分配记录状态
+        success = cascade_task_dispatcher.update_allocation_status(
+            allocation_id=req.allocation_id,
+            status='completed',
+            result_summary={
+                "task_id": req.task_id,
+                "results": req.results,
+                "article_count": req.article_count
+            },
+            article_count=req.article_count
+        )
+        
+        if not success:
+            return error_response(code=404, message="分配记录不存在")
+        
+        # 创建同步日志
+        node_id = current_user.get("node_id", "unknown")
+        log = cascade_manager.create_sync_log(
+            node_id=node_id,
+            operation="task_completion",
+            direction="push",
+            extra_data={
+                "allocation_id": req.allocation_id,
+                "task_id": req.task_id,
+                "article_count": req.article_count,
+                "result_count": len(req.results)
+            }
+        )
+        
+        if log:
+            cascade_manager.update_sync_log(log.id, status=1, data_count=req.article_count)
+        
+        return success_response(message="任务完成上报成功")
+        
+    except Exception as e:
+        print_error(f"上报任务完成失败: {str(e)}")
         return error_response(code=500, message=str(e))
 
 
@@ -583,6 +794,7 @@ async def dispatch_tasks(
     将任务分配给各个在线的子节点
     """
     from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    from core.models.cascade_task_allocation import CascadeTaskAllocation
     
     try:
         # 刷新节点状态
@@ -607,8 +819,10 @@ async def dispatch_tasks(
         # 执行分发
         await cascade_task_dispatcher.execute_dispatch(task_id)
         
-        # 获取分配数量
-        allocation_count = len(cascade_task_dispatcher.allocations)
+        # 获取分配数量（从数据库）
+        allocation_count = session.query(CascadeTaskAllocation).filter(
+            CascadeTaskAllocation.status == 'pending'
+        ).count()
         
         return success_response({
             "online_nodes": online_count,
@@ -630,36 +844,40 @@ async def get_allocations(
     node_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: dict = Depends(get_current_user_or_ak)
 ):
     """
-    查看任务分配情况
+    查看任务分配情况（从数据库读取）
     
     参数:
         task_id: 按任务ID筛选
         node_id: 按节点ID筛选
-        status: 按状态筛选 (pending, executing, completed, failed)
+        status: 按状态筛选 (pending, claimed, executing, completed, failed, timeout)
+        limit: 每页数量
+        offset: 偏移量
     """
-    from jobs.cascade_task_dispatcher import cascade_task_dispatcher
+    from core.models.cascade_task_allocation import CascadeTaskAllocation
     
+    session = DB.get_session()
     try:
-        allocations = list(cascade_task_dispatcher.allocations.values())
+        query = session.query(CascadeTaskAllocation)
         
         if task_id:
-            allocations = [a for a in allocations if a.task_id == task_id]
+            query = query.filter(CascadeTaskAllocation.task_id == task_id)
         if node_id:
-            allocations = [a for a in allocations if a.node_id == node_id]
+            query = query.filter(CascadeTaskAllocation.node_id == node_id)
         if status:
-            allocations = [a for a in allocations if a.status == status]
+            query = query.filter(CascadeTaskAllocation.status == status)
         
-        # 分页
-        total = len(allocations)
-        allocations = allocations[:limit]
+        total = query.count()
+        allocations = query.order_by(
+            CascadeTaskAllocation.dispatched_at.desc()
+        ).limit(limit).offset(offset).all()
         
         allocation_list = [alloc.to_dict() for alloc in allocations]
         
         # 添加节点名称
-        session = DB.get_session()
         for alloc_data in allocation_list:
             node = session.query(CascadeNode).filter(
                 CascadeNode.id == alloc_data["node_id"]
@@ -669,7 +887,236 @@ async def get_allocations(
         
         return success_response({
             "list": allocation_list,
-            "total": total
+            "total": total,
+            "page": {
+                "limit": limit,
+                "offset": offset
+            }
+        })
+        
+    except Exception as e:
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/start-scheduler", summary="启动网关定时调度服务")
+async def start_scheduler(
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    启动网关定时调度服务
+    
+    根据 MessageTask 的 cron 表达式定时下发任务
+    """
+    from jobs.cascade_task_dispatcher import cascade_schedule_service
+    
+    try:
+        cascade_schedule_service.start()
+        return success_response(message="定时调度服务已启动")
+    except Exception as e:
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/stop-scheduler", summary="停止网关定时调度服务")
+async def stop_scheduler(
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """停止网关定时调度服务"""
+    from jobs.cascade_task_dispatcher import cascade_schedule_service
+    
+    try:
+        cascade_schedule_service.stop()
+        return success_response(message="定时调度服务已停止")
+    except Exception as e:
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/reload-scheduler", summary="重载网关定时调度任务")
+async def reload_scheduler(
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """重载网关定时调度任务"""
+    from jobs.cascade_task_dispatcher import cascade_schedule_service
+    
+    try:
+        cascade_schedule_service.reload()
+        return success_response(message="定时调度任务已重载")
+    except Exception as e:
+        return error_response(code=500, message=str(e))
+
+
+@router.get("/feed-status", summary="查看各公众号更新状态")
+async def get_feed_status(
+    feed_id: Optional[str] = Query(None, description="公众号ID，不指定则返回所有"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    查看各公众号的更新状态
+    
+    返回每个公众号的：
+    - 基本信息
+    - 最近抓取时间
+    - 文章数量
+    - 最后执行的任务状态和执行节点
+    """
+    from core.models.cascade_task_allocation import CascadeTaskAllocation
+    from core.models.article import Article
+    from sqlalchemy import func
+    
+    session = DB.get_session()
+    try:
+        # 构建查询
+        query = session.query(Feed)
+        if feed_id:
+            query = query.filter(Feed.id == feed_id)
+        
+        # 先计算总数
+        total = query.count()
+        
+        # 再分页
+        feeds = query.limit(limit).offset(offset).all()
+        
+        feed_status_list = []
+        for feed in feeds:
+            # 获取文章数量
+            article_count = session.query(Article).filter(
+                Article.mp_id == feed.id
+            ).count()
+            
+            # 获取最近一篇文章的时间和来源节点
+            latest_article = session.query(Article).filter(
+                Article.mp_id == feed.id
+            ).order_by(Article.created_at.desc()).first()
+            
+            latest_article_time = latest_article.created_at.isoformat() if latest_article and latest_article.created_at else None
+            
+            # 获取该公众号相关的最近完成的任务分配（包含节点信息）
+            recent_allocation = session.query(CascadeTaskAllocation).filter(
+                CascadeTaskAllocation.feed_ids.like(f'%"{feed.id}"%'),
+                CascadeTaskAllocation.status.in_(['completed', 'failed'])
+            ).order_by(CascadeTaskAllocation.completed_at.desc()).first()
+            
+            last_task_status = None
+            last_task_time = None
+            last_task_node_id = None
+            last_task_node_name = None
+            
+            if recent_allocation:
+                last_task_status = recent_allocation.status
+                last_task_time = recent_allocation.completed_at.isoformat() if recent_allocation.completed_at else None
+                last_task_node_id = recent_allocation.node_id
+                
+                # 获取节点名称
+                if recent_allocation.node_id:
+                    node = session.query(CascadeNode).filter(
+                        CascadeNode.id == recent_allocation.node_id
+                    ).first()
+                    last_task_node_name = node.name if node else None
+            
+            # 计算更新状态
+            update_status = "unknown"
+            if feed.update_time:
+                import time
+                hours_since_update = (int(time.time()) - feed.update_time) / 3600
+                if hours_since_update < 1:
+                    update_status = "fresh"  # 1小时内更新
+                elif hours_since_update < 24:
+                    update_status = "recent"  # 24小时内更新
+                elif hours_since_update < 72:
+                    update_status = "stale"  # 3天内更新
+                else:
+                    update_status = "outdated"  # 超过3天
+            
+            feed_status_list.append({
+                "id": feed.id,
+                "mp_name": feed.mp_name,
+                "mp_cover": feed.mp_cover,
+                "status": feed.status,
+                "article_count": article_count,
+                "latest_article_time": latest_article_time,
+                "update_status": update_status,
+                "update_time": feed.update_time,
+                "sync_time": feed.sync_time,
+                "last_task": {
+                    "status": last_task_status,
+                    "time": last_task_time,
+                    "node_id": last_task_node_id,
+                    "node_name": last_task_node_name
+                } if last_task_status else None,
+                "created_at": feed.created_at.isoformat() if feed.created_at else None,
+                "updated_at": feed.updated_at.isoformat() if feed.updated_at else None
+            })
+        
+        # 按更新状态排序（过期优先显示）
+        status_order = {"outdated": 0, "stale": 1, "unknown": 2, "recent": 3, "fresh": 4}
+        feed_status_list.sort(key=lambda x: status_order.get(x["update_status"], 2))
+        
+        return success_response({
+            "list": feed_status_list,
+            "total": total,
+            "page": {
+                "limit": limit,
+                "offset": offset
+            }
+        })
+        
+    except Exception as e:
+        print_error(f"获取公众号状态失败: {str(e)}")
+        return error_response(code=500, message=str(e))
+
+
+@router.get("/pending-allocations", summary="查看待认领的任务数量")
+async def get_pending_allocations_count(
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    查看待认领的任务数量
+    
+    网关可以查看当前有多少任务等待子节点认领
+    """
+    from core.models.cascade_task_allocation import CascadeTaskAllocation
+    
+    session = DB.get_session()
+    try:
+        # 待认领任务（node_id 为空）
+        pending_count = session.query(CascadeTaskAllocation).filter(
+            CascadeTaskAllocation.node_id == None,
+            CascadeTaskAllocation.status == 'pending'
+        ).count()
+        
+        # 执行中任务
+        executing_count = session.query(CascadeTaskAllocation).filter(
+            CascadeTaskAllocation.status.in_(['claimed', 'executing'])
+        ).count()
+        
+        # 今日完成任务
+        from datetime import datetime, timedelta
+        today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        completed_today = session.query(CascadeTaskAllocation).filter(
+            CascadeTaskAllocation.status == 'completed',
+            CascadeTaskAllocation.completed_at >= today_start
+        ).count()
+        
+        # 今日失败任务
+        failed_today = session.query(CascadeTaskAllocation).filter(
+            CascadeTaskAllocation.status == 'failed',
+            CascadeTaskAllocation.completed_at >= today_start
+        ).count()
+        
+        # 在线节点数
+        online_nodes = session.query(CascadeNode).filter(
+            CascadeNode.node_type == 1,
+            CascadeNode.status == 1,
+            CascadeNode.is_active == True
+        ).count()
+        
+        return success_response({
+            "pending_tasks": pending_count,
+            "executing_tasks": executing_count,
+            "completed_today": completed_today,
+            "failed_today": failed_today,
+            "online_nodes": online_nodes
         })
         
     except Exception as e:

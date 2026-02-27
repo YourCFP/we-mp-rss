@@ -3,6 +3,8 @@ from core.models.article import Article
 from core.models.config_management import ConfigManagement
 from core.models.feed import Feed
 from core.models.message_task import MessageTask
+from core.models.cascade_node import CascadeNode, CascadeSyncLog
+from core.models.cascade_task_allocation import CascadeTaskAllocation
 from core.db import Db,DB
 from core.config import cfg
 from core.auth import pwd_context

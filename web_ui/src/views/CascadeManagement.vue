@@ -9,11 +9,13 @@ import {
   testNodeConnection,
   getSyncLogs,
   getAllocations,
-  dispatchTask
+  dispatchTask,
+  getFeedStatus,
+  getPendingAllocations
 } from '@/api/cascade'
-import type { CascadeNode, CreateNodeRequest, UpdateNodeRequest, SyncLog, TaskAllocation } from '@/api/cascade'
+import type { CascadeNode, CreateNodeRequest, UpdateNodeRequest, SyncLog, TaskAllocation, FeedStatus, PendingAllocationsStats } from '@/api/cascade'
 import { Modal, Message } from '@arco-design/web-vue'
-import { IconCopy, IconDelete, IconEdit, IconRefresh, IconLink, IconCheckCircle, IconCloseCircle, IconThunderbolt, IconQuestionCircle } from '@arco-design/web-vue/es/icon'
+import { IconCopy, IconDelete, IconEdit, IconRefresh, IconLink, IconCheckCircle, IconCloseCircle, IconThunderbolt, IconQuestionCircle, IconStorage, IconClockCircle, IconCheck, IconClose } from '@arco-design/web-vue/es/icon'
 
 const columns = [
   { title: '节点名称', dataIndex: 'name' },
@@ -36,23 +38,43 @@ const logColumns = [
 ]
 
 const allocationColumns = [
-  { title: '分配ID', dataIndex: 'allocation_id', ellipsis: true, width: 120 },
-  { title: '任务ID', dataIndex: 'task_id', ellipsis: true, width: 120 },
+  { title: '分配ID', dataIndex: 'id', ellipsis: true, width: 280 },
+  { title: '任务名称', dataIndex: 'task_name', ellipsis: true },
   { title: '节点名称', dataIndex: 'node_name' },
   { title: '公众号数', dataIndex: 'feed_ids', slotName: 'feed_count' },
   { title: '状态', slotName: 'allocation_status' },
-  { title: '创建时间', slotName: 'created_at' },
-  { title: '更新时间', slotName: 'updated_at' }
+  { title: '文章数', dataIndex: 'article_count' },
+  { title: '创建时间', slotName: 'dispatched_at' }
+]
+
+const feedStatusColumns = [
+  { title: '公众号名称', dataIndex: 'mp_name', ellipsis: true },
+  { title: '文章数', dataIndex: 'article_count', width: 80 },
+  { title: '更新状态', slotName: 'update_status', width: 100 },
+  { title: '最近文章', slotName: 'latest_article_time', width: 160 },
+  { title: '最后任务', slotName: 'last_task', width: 120 },
+  { title: '执行节点', slotName: 'last_task_node', width: 120 },
+  { title: '更新时间', slotName: 'updated_at', width: 160 }
 ]
 
 const nodeList = ref<CascadeNode[]>([])
 const logList = ref<SyncLog[]>([])
 const allocationList = ref<TaskAllocation[]>([])
+const feedStatusList = ref<FeedStatus[]>([])
+const stats = ref<PendingAllocationsStats>({
+  pending_tasks: 0,
+  executing_tasks: 0,
+  completed_today: 0,
+  failed_today: 0,
+  online_nodes: 0
+})
 const totalLogs = ref(0)
 const totalAllocations = ref(0)
+const totalFeeds = ref(0)
 const loading = ref(false)
 const logLoading = ref(false)
 const allocationLoading = ref(false)
+const feedStatusLoading = ref(false)
 const dispatching = ref(false)
 const error = ref('')
 const visible = ref(false)
@@ -70,6 +92,11 @@ const form = reactive({
 })
 
 const logPagination = reactive({
+  limit: 20,
+  offset: 0
+})
+
+const feedStatusPagination = reactive({
   limit: 20,
   offset: 0
 })
@@ -116,6 +143,38 @@ const fetchAllocations = async () => {
   }
 }
 
+const fetchFeedStatus = async () => {
+  try {
+    feedStatusLoading.value = true
+    const res = await getFeedStatus({
+      limit: feedStatusPagination.limit,
+      offset: feedStatusPagination.offset
+    })
+    feedStatusList.value = res?.list || []
+    totalFeeds.value = res?.total || 0
+  } catch (err) {
+    console.error('获取公众号状态失败:', err)
+  } finally {
+    feedStatusLoading.value = false
+  }
+}
+
+const handleFeedStatusPageChange = (page: number) => {
+  feedStatusPagination.offset = (page - 1) * feedStatusPagination.limit
+  fetchFeedStatus()
+}
+
+const fetchStats = async () => {
+  try {
+    const res = await getPendingAllocations()
+    if (res) {
+      stats.value = res
+    }
+  } catch (err) {
+    console.error('获取统计失败:', err)
+  }
+}
+
 const handleDispatchTask = async () => {
   try {
     dispatching.value = true
@@ -123,24 +182,23 @@ const handleDispatchTask = async () => {
     
     // 显示详细结果
     if (res) {
-      const { online_nodes, task_count, tasks, allocations_created } = res
+      const { task_count, allocations_created } = res
       
-      if (online_nodes === 0) {
-        Message.warning('没有在线的子节点，请确保子节点已启动并连接')
-      } else if (task_count === 0) {
-        Message.warning('没有可分发的任务。请先创建消息任务并关联公众号')
+      if (task_count === 0) {
+        Message.warning('没有启用的任务。请先创建消息任务并关联公众号')
       } else if (allocations_created === 0) {
-        Message.warning(`发现 ${task_count} 个任务，但没有创建分配。可能是任务没有关联公众号或节点容量不足`)
+        Message.info(`发现 ${task_count} 个任务，任务记录已创建，等待子节点认领`)
       } else {
-        Message.success(`分发成功：${allocations_created} 个分配已创建，涉及 ${task_count} 个任务`)
+        Message.success(`成功创建 ${allocations_created} 个待认领任务，子节点可以主动认领执行`)
       }
       
-      console.log('分发结果:', res)
+      console.log('调度结果:', res)
     }
     
     fetchAllocations()
+    fetchStats()
   } catch (err) {
-    Message.error('任务分发失败: ' + (err instanceof Error ? err.message : '未知错误'))
+    Message.error('任务调度失败: ' + (err instanceof Error ? err.message : '未知错误'))
   } finally {
     dispatching.value = false
   }
@@ -330,10 +388,34 @@ const getAllocationStatusColor = (status: string) => {
 
 const getAllocationStatusText = (status: string) => {
   const map: Record<string, string> = {
-    pending: '待执行',
+    pending: '待认领',
+    claimed: '已认领',
     executing: '执行中',
     completed: '已完成',
-    failed: '失败'
+    failed: '失败',
+    timeout: '超时'
+  }
+  return map[status] || status
+}
+
+const getUpdateStatusColor = (status: string) => {
+  const map: Record<string, string> = {
+    fresh: 'green',
+    recent: 'blue',
+    stale: 'orange',
+    outdated: 'red',
+    unknown: 'gray'
+  }
+  return map[status] || 'gray'
+}
+
+const getUpdateStatusText = (status: string) => {
+  const map: Record<string, string> = {
+    fresh: '最新',
+    recent: '较新',
+    stale: '陈旧',
+    outdated: '过期',
+    unknown: '未知'
   }
   return map[status] || status
 }
@@ -348,11 +430,14 @@ const handleTabChange = (key: string) => {
     fetchLogs()
   } else if (key === 'allocations') {
     fetchAllocations()
+  } else if (key === 'feed-status') {
+    fetchFeedStatus()
   }
 }
 
 onMounted(() => {
   fetchNodes()
+  fetchStats()
 })
 </script>
 
@@ -388,18 +473,18 @@ onMounted(() => {
               type="info" 
               show-icon
             >
-              级联系统支持父子节点架构。父节点负责统一管理数据，子节点从父节点同步并执行任务。
+              级联系统采用"子节点主动认领"模式：网关创建待执行任务，子节点主动认领并执行，完成后上报结果。
             </a-alert>
             
-            <!-- 任务分发按钮 -->
+            <!-- 任务调度按钮 -->
             <a-space>
               <a-button type="primary" :loading="dispatching" @click="handleDispatchTask">
                 <template #icon>
                   <icon-thunderbolt />
                 </template>
-                分发任务
+                触发调度
               </a-button>
-              <a-tooltip content="将消息任务分配给在线的子节点执行">
+              <a-tooltip content="创建待执行任务，等待子节点主动认领">
                 <icon-question-circle style="color: #999;" />
               </a-tooltip>
             </a-space>
@@ -550,7 +635,7 @@ onMounted(() => {
                 <template #icon>
                   <icon-thunderbolt />
                 </template>
-                分发任务
+                触发调度
               </a-button>
               <a-button @click="fetchAllocations" :loading="allocationLoading">
                 <template #icon>
@@ -564,7 +649,7 @@ onMounted(() => {
               :columns="allocationColumns"
               :data="allocationList"
               :loading="allocationLoading"
-              row-key="allocation_id"
+              row-key="id"
               :pagination="false"
             >
               <template #feed_count="{ record }">
@@ -577,8 +662,67 @@ onMounted(() => {
                 </a-tag>
               </template>
 
-              <template #created_at="{ record }">
-                {{ formatDate(record.created_at) }}
+              <template #dispatched_at="{ record }">
+                {{ formatDate(record.dispatched_at) }}
+              </template>
+            </a-table>
+
+            <a-empty v-if="!allocationLoading && allocationList.length === 0" description="暂无任务分配记录" />
+          </a-space>
+        </a-tab-pane>
+
+        <!-- 公众号状态标签页 -->
+        <a-tab-pane key="feed-status" title="公众号状态">
+          <a-space direction="vertical" fill>
+            <a-space>
+              <a-button @click="fetchFeedStatus" :loading="feedStatusLoading">
+                <template #icon>
+                  <icon-refresh />
+                </template>
+                刷新
+              </a-button>
+            </a-space>
+
+            <a-table
+              :columns="feedStatusColumns"
+              :data="feedStatusList"
+              :loading="feedStatusLoading"
+              row-key="id"
+              :pagination="{
+                current: Math.floor(feedStatusPagination.offset / feedStatusPagination.limit) + 1,
+                pageSize: feedStatusPagination.limit,
+                total: totalFeeds,
+                showTotal: true,
+                onChange: handleFeedStatusPageChange
+              }"
+            >
+              <template #update_status="{ record }">
+                <a-tag :color="getUpdateStatusColor(record.update_status)">
+                  {{ getUpdateStatusText(record.update_status) }}
+                </a-tag>
+              </template>
+
+              <template #latest_article_time="{ record }">
+                {{ formatDate(record.latest_article_time) }}
+              </template>
+
+              <template #last_task="{ record }">
+                <template v-if="record.last_task">
+                  <a-tag :color="getAllocationStatusColor(record.last_task.status)" size="small">
+                    {{ getAllocationStatusText(record.last_task.status) }}
+                  </a-tag>
+                </template>
+                <span v-else style="color: #999;">-</span>
+              </template>
+
+              <template #last_task_node="{ record }">
+                <span v-if="record.last_task?.node_name" style="color: #165dff;">
+                  {{ record.last_task.node_name }}
+                </span>
+                <span v-else-if="record.last_task?.node_id" style="color: #999;">
+                  {{ record.last_task.node_id.substring(0, 8) }}...
+                </span>
+                <span v-else style="color: #999;">-</span>
               </template>
 
               <template #updated_at="{ record }">
@@ -586,7 +730,7 @@ onMounted(() => {
               </template>
             </a-table>
 
-            <a-empty v-if="!allocationLoading && allocationList.length === 0" description="暂无任务分配记录" />
+            <a-empty v-if="!feedStatusLoading && feedStatusList.length === 0" description="暂无公众号" />
           </a-space>
         </a-tab-pane>
       </a-tabs>
@@ -697,6 +841,14 @@ onMounted(() => {
 <style scoped>
 .cascade-management {
   padding: 20px;
+}
+
+.stat-card {
+  text-align: center;
+}
+
+.stat-card :deep(.arco-card-body) {
+  padding: 16px;
 }
 
 .form-hint {

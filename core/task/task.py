@@ -53,7 +53,7 @@ class TaskScheduler:
     def add_cron_job(self,
                      func: Callable,
                      cron_expr: str,
-                     args: Optional[tuple] = None,
+                     args: Optional[dict] = None,
                      kwargs: Optional[dict] = None,
                      job_id: Optional[str] = None,
                      tag: str = ""

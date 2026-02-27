@@ -116,6 +116,79 @@ class DatabaseSynchronizer:
             self.logger.warning(f"权限检查失败: {e}")
             return True  # 如果检查失败，继续尝试
 
+    def _migrate_cascade_task_allocations(self):
+        """
+        迁移 cascade_task_allocations 表：将 node_id 从 NOT NULL 改为 NULL
+        SQLite 不支持 ALTER COLUMN，需要重建表
+        """
+        from sqlalchemy import text
+        table_name = 'cascade_task_allocations'
+        
+        try:
+            inspector = inspect(self.engine)
+            if not inspector.has_table(table_name):
+                return  # 表不存在，无需迁移
+            
+            # 检查 node_id 是否已经是 nullable
+            columns = {c["name"]: c for c in inspector.get_columns(table_name)}
+            if columns.get("node_id", {}).get("nullable", False):
+                self.logger.info(f"{table_name}.node_id 已是 nullable，跳过迁移")
+                return
+            
+            self.logger.info(f"开始迁移 {table_name} 表，将 node_id 改为 nullable...")
+            
+            with self.engine.begin() as conn:
+                # 1. 创建新表
+                conn.execute(text(f"""
+                    CREATE TABLE {table_name}_new (
+                        id VARCHAR(255) PRIMARY KEY,
+                        task_id VARCHAR(255) NOT NULL,
+                        task_name VARCHAR(255),
+                        cron_exp VARCHAR(100),
+                        node_id VARCHAR(255),
+                        feed_ids TEXT NOT NULL,
+                        status VARCHAR(20),
+                        result_summary TEXT,
+                        error_message TEXT,
+                        dispatched_at DATETIME,
+                        claimed_at DATETIME,
+                        started_at DATETIME,
+                        completed_at DATETIME,
+                        schedule_run_id VARCHAR(255),
+                        article_count INTEGER DEFAULT 0,
+                        new_article_count INTEGER DEFAULT 0,
+                        created_at DATETIME,
+                        updated_at DATETIME
+                    )
+                """))
+                
+                # 2. 复制数据
+                conn.execute(text(f"""
+                    INSERT INTO {table_name}_new 
+                    SELECT id, task_id, task_name, cron_exp, node_id, feed_ids, status,
+                           result_summary, error_message, dispatched_at, claimed_at,
+                           started_at, completed_at, schedule_run_id, article_count,
+                           new_article_count, created_at, updated_at
+                    FROM {table_name}
+                """))
+                
+                # 3. 删除旧表
+                conn.execute(text(f"DROP TABLE {table_name}"))
+                
+                # 4. 重命名新表
+                conn.execute(text(f"ALTER TABLE {table_name}_new RENAME TO {table_name}"))
+                
+                # 5. 重建索引
+                conn.execute(text(f"CREATE INDEX ix_{table_name}_task_id ON {table_name}(task_id)"))
+                conn.execute(text(f"CREATE INDEX ix_{table_name}_node_id ON {table_name}(node_id)"))
+                conn.execute(text(f"CREATE INDEX ix_{table_name}_status ON {table_name}(status)"))
+                conn.execute(text(f"CREATE INDEX ix_{table_name}_schedule_run_id ON {table_name}(schedule_run_id)"))
+            
+            self.logger.info(f"{table_name} 表迁移完成，node_id 已改为 nullable")
+            
+        except Exception as e:
+            self.logger.warning(f"迁移 {table_name} 表时出错: {e}")
+    
     def sync(self):
         """同步模型到数据库"""
         try:
@@ -129,6 +202,10 @@ class DatabaseSynchronizer:
             
             # 反射现有数据库结构
             metadata.reflect(bind=self.engine)
+            
+            # SQLite 特殊迁移：修改 node_id 为 nullable
+            if "sqlite" in self.db_url:
+                self._migrate_cascade_task_allocations()
             
             # 处理不同数据库的特殊类型映射
             for model in self.models.values():

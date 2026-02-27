@@ -412,6 +412,101 @@ class CascadeClient:
             print_error(f"获取待处理任务失败: {str(e)}")
             raise
 
+    async def claim_task(self) -> dict:
+        """
+        子节点认领任务（原子操作，带互斥锁）
+        
+        返回:
+            任务包字典，无任务则返回None
+        """
+        try:
+            result = await self._request("POST", "/api/v1/wx/cascade/claim-task")
+            data = result.get("data")
+            if data and isinstance(data, dict) and "allocation_id" in data:
+                return data
+            return None
+        except Exception as e:
+            print_error(f"认领任务失败: {str(e)}")
+            raise
+
+    async def update_task_status(
+        self,
+        allocation_id: str,
+        status: str,
+        error_message: str = None
+    ) -> dict:
+        """
+        更新任务分配状态
+        
+        参数:
+            allocation_id: 分配记录ID
+            status: 状态 (executing, completed, failed)
+            error_message: 错误信息
+        
+        返回:
+            父节点响应
+        """
+        data = {
+            "allocation_id": allocation_id,
+            "status": status,
+            "error_message": error_message,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        result = await self._request("PUT", "/api/v1/wx/cascade/task-status", data=data)
+        return result
+
+    async def upload_articles(
+        self,
+        allocation_id: str,
+        articles: List[dict]
+    ) -> dict:
+        """
+        上行文章数据到网关
+        
+        参数:
+            allocation_id: 任务分配ID
+            articles: 文章列表
+        
+        返回:
+            父节点响应
+        """
+        data = {
+            "allocation_id": allocation_id,
+            "articles": articles,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        result = await self._request("POST", "/api/v1/wx/cascade/upload-articles", data=data)
+        return result
+
+    async def report_task_completion(
+        self,
+        allocation_id: str,
+        task_id: str,
+        results: List[dict],
+        article_count: int
+    ) -> dict:
+        """
+        上报任务完成结果
+        
+        参数:
+            allocation_id: 分配记录ID
+            task_id: 任务ID
+            results: 执行结果列表
+            article_count: 文章数量
+        
+        返回:
+            父节点响应
+        """
+        data = {
+            "allocation_id": allocation_id,
+            "task_id": task_id,
+            "results": results,
+            "article_count": article_count,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        result = await self._request("POST", "/api/v1/wx/cascade/report-completion", data=data)
+        return result
+
 
 # 全局级联管理器实例
 cascade_manager = CascadeManager()

@@ -19,6 +19,7 @@ class CascadeSyncService:
         self.client: Optional[CascadeClient] = None
         self.sync_enabled = False
         self.sync_interval = 300  # 默认5分钟同步一次
+        self.claim_interval = 30  # 默认30秒认领一次任务
         self.running = False
     
     def initialize(self):
@@ -243,6 +244,136 @@ class CascadeSyncService:
         except Exception as e:
             print_error(f"心跳发送失败: {str(e)}")
     
+    async def claim_and_execute_task(self):
+        """
+        从父节点认领并执行任务
+        
+        新模式：子节点主动拉取任务
+        """
+        if not self.client:
+            return
+        
+        try:
+            # 1. 从父节点认领任务
+            task_package = await self.client.claim_task()
+            
+            if not task_package:
+                return  # 没有待处理任务
+            
+            print_info(f"认领到任务: {task_package.get('task_name', 'unknown')}")
+            
+            # 2. 执行任务
+            results = await self._execute_task(task_package)
+            
+            # 3. 上报结果
+            if results:
+                await self.client.report_task_completion(
+                    allocation_id=task_package.get("allocation_id"),
+                    task_id=task_package.get("task_id"),
+                    results=results,
+                    article_count=sum(r.get("article_count", 0) for r in results)
+                )
+                
+        except Exception as e:
+            print_error(f"认领/执行任务失败: {str(e)}")
+    
+    async def _execute_task(self, task_package: dict) -> list:
+        """
+        执行认领到的任务
+        
+        参数:
+            task_package: 任务包，包含任务信息和公众号列表
+        
+        返回: 执行结果列表
+        """
+        from jobs.mps import do_job
+        from core.models.feed import Feed
+        from core.models.message_task import MessageTask
+        
+        results = []
+        feeds_data = task_package.get("feeds", [])
+        task_id = task_package.get("task_id")
+        allocation_id = task_package.get("allocation_id")
+        task_name = task_package.get("task_name", "unknown")
+        
+        print_info(f"开始执行任务 [{task_name}]，公众号数量: {len(feeds_data)}")
+        
+        # 更新状态为执行中
+        await self.client.update_task_status(allocation_id, "executing")
+        
+        session = DB.get_session()
+        
+        # 获取任务对象（用于 webhook 等功能）
+        task = session.query(MessageTask).filter(MessageTask.id == task_id).first()
+        
+        for feed_data in feeds_data:
+            try:
+                feed_id = feed_data.get("id")
+                feed_name = feed_data.get("mp_name", feed_id)
+                
+                print_info(f"正在更新公众号: {feed_name}")
+                
+                # 获取 Feed 对象
+                feed = session.query(Feed).filter(Feed.id == feed_id).first()
+                if not feed:
+                    print_error(f"公众号不存在: {feed_id}")
+                    results.append({
+                        "feed_id": feed_id,
+                        "mp_name": feed_name,
+                        "success": False,
+                        "article_count": 0,
+                        "new_article_count": 0,
+                        "error": "公众号不存在"
+                    })
+                    continue
+                
+                # 执行公众号更新任务（同步调用）
+                import threading
+                result_container = {"success": False, "article_count": 0, "new_article_count": 0, "error": None}
+                
+                def run_job():
+                    try:
+                        do_job(mp=feed, task=task, isTest=False)
+                        result_container["success"] = True
+                    except Exception as e:
+                        result_container["error"] = str(e)
+                
+                # 在线程中执行（因为 do_job 可能会阻塞）
+                job_thread = threading.Thread(target=run_job)
+                job_thread.start()
+                job_thread.join(timeout=120)  # 最多等待 2 分钟
+                
+                if job_thread.is_alive():
+                    result_container["error"] = "任务执行超时"
+                
+                results.append({
+                    "feed_id": feed_id,
+                    "mp_name": feed_name,
+                    "success": result_container["success"],
+                    "article_count": result_container["article_count"],
+                    "new_article_count": result_container["new_article_count"],
+                    "error": result_container["error"]
+                })
+                
+                if result_container["success"]:
+                    print_success(f"公众号 {feed_name} 更新完成")
+                else:
+                    print_error(f"公众号 {feed_name} 更新失败: {result_container.get('error', '未知错误')}")
+                
+            except Exception as e:
+                print_error(f"处理公众号 {feed_data.get('mp_name')} 失败: {str(e)}")
+                results.append({
+                    "feed_id": feed_data.get("id"),
+                    "mp_name": feed_data.get("mp_name"),
+                    "success": False,
+                    "article_count": 0,
+                    "new_article_count": 0,
+                    "error": str(e)
+                })
+        
+        print_success(f"任务执行完成，处理 {len(results)} 个公众号")
+        return results
+    
     async def full_sync(self):
         """执行完整同步"""
         print_info("开始完整同步...")
@@ -250,31 +381,42 @@ class CascadeSyncService:
         # 1. 发送心跳
         await self.send_heartbeat()
         
-        # # 2. 同步公众号
-        # await self.sync_feeds()
+        # 2. 同步公众号
+        await self.sync_feeds()
         
-        # # 3. 同步消息任务
-        # await self.sync_message_tasks()
+        # 3. 尝试认领任务
+        await self.claim_and_execute_task()
         
         print_success("完整同步完成")
     
     async def start_periodic_sync(self):
-        """启动定期同步"""
+        """启动定期同步和任务认领"""
         if not self.sync_enabled or self.running:
             return
         
         self.running = True
-        print_info(f"启动定期同步服务，间隔: {self.sync_interval}秒")
+        print_info(f"启动定期同步服务，同步间隔: {self.sync_interval}秒，任务认领间隔: {self.claim_interval}秒")
+        
+        sync_counter = 0
         
         try:
             while self.running:
                 try:
-                    await self.full_sync()
+                    # 每次循环都尝试认领任务
+                    await self.claim_and_execute_task()
+                    
+                    # 每隔 sync_interval 秒执行一次完整同步
+                    if sync_counter >= self.sync_interval:
+                        await self.full_sync()
+                        sync_counter = 0
+                    
                 except Exception as e:
                     print_error(f"定期同步出错: {str(e)}")
                 
-                # 等待下次同步
-                await asyncio.sleep(int(self.sync_interval))
+                # 等待下次任务认领
+                await asyncio.sleep(int(self.claim_interval))
+                sync_counter += self.claim_interval
+                
         except asyncio.CancelledError:
             print_info("定期同步服务已停止")
     
