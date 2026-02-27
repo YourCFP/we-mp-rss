@@ -1,3 +1,5 @@
+from sqlalchemy import BigInteger
+
 from  .base import Base,Column,String,Integer,DateTime,Text,DATA_STATUS
 class ArticleBase(Base):
     from_attributes = True
@@ -9,10 +11,10 @@ class ArticleBase(Base):
     url=Column(String(500))
     description=Column(Text)
     status = Column(Integer,default=1)
-    publish_time = Column(Integer,index=True)
+    publish_time = Column(BigInteger,index=True)
     created_at = Column(DateTime)
     updated_at = Column(DateTime)  
-    updated_at_millis = Column(Integer)  
+    updated_at_millis = Column(BigInteger)  
     is_export = Column(Integer)
     is_read = Column(Integer, default=0)
 class Article(ArticleBase):
