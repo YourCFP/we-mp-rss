@@ -34,13 +34,13 @@ if __name__ == '__main__':
     else:
         print_info("级联模式未启用或当前节点为父节点")
     
+    if not cascade_service_started:
+        print_info("启动网关定时调度服务")
+        import asyncio
+        from jobs.cascade_task_dispatcher import cascade_schedule_service
+        cascade_schedule_service.start()
 
-    print_info("启动网关定时调度服务")
-    import asyncio
-    from jobs.cascade_task_dispatcher import cascade_schedule_service
-    cascade_schedule_service.start()
-
-    if  cfg.args.job =="True" and cfg.get("server.enable_job",False):
+    if  cfg.args.job =="True" and cfg.get("server.enable_job",False) and  cascade_service_started:
         from jobs import start_all_task
         threading.Thread(target=start_all_task,daemon=False).start()
     else:

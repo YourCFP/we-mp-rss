@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from core.models.article import Article
 from .article import UpdateArticle,Update_Over
 import core.db as db
@@ -43,7 +43,6 @@ def do_job(mp=None,task:MessageTask=None,isTest=False):
         all_count=0
         if isTest:
             # 测试模式使用模拟数据
-            from datetime import datetime, timedelta
             mock_articles = [{
                 "id": "test-article-001",
                 "mp_id": mp.id,

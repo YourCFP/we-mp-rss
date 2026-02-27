@@ -44,7 +44,8 @@ class CascadeSyncService:
         # 创建客户端
         self.client = CascadeClient(parent_url, api_key, api_secret)
         self.sync_enabled = True
-        self.sync_interval = cascade_config.get("sync_interval", 300)
+        self.sync_interval = int(cascade_config.get("sync_interval", 300))
+        self.claim_interval = int(cascade_config.get("claim_interval", 30))
         
         print_success(f"级联同步服务初始化成功，父节点地址: {parent_url}")
     
@@ -240,9 +241,28 @@ class CascadeSyncService:
             return
         
         try:
-            await self.client.send_heartbeat()
+            # 获取本机的回调地址
+            from core.config import cfg
+            callback_url = cfg.get("cascade.callback_url", "")
+            await self.client.send_heartbeat(callback_url=callback_url)
         except Exception as e:
             print_error(f"心跳发送失败: {str(e)}")
+    
+    async def handle_task_notification(self, notification: dict):
+        """
+        处理来自父节点的任务通知
+        
+        参数:
+            notification: 通知数据，包含 allocation_id, feed_count 等
+        """
+        notification_type = notification.get("type")
+        
+        if notification_type == "new_task":
+            print_info(f"收到新任务通知: {notification.get('feed_count')} 个公众号待认领")
+            # 立即尝试认领任务
+            await self.claim_and_execute_task()
+        else:
+            print_info(f"收到未知类型通知: {notification_type}")
     
     async def claim_and_execute_task(self):
         """
@@ -305,6 +325,26 @@ class CascadeSyncService:
         
         # 获取任务对象（用于 webhook 等功能）
         task = session.query(MessageTask).filter(MessageTask.id == task_id).first()
+        
+        # 如果本地没有任务记录，创建一个临时任务对象（子节点可能没有同步任务数据）
+        if not task:
+            # message_type 是整数类型，默认为 0 (wechat)
+            msg_type = task_package.get("message_type", 0)
+            if isinstance(msg_type, str):
+                msg_type = int(msg_type) if msg_type.isdigit() else 0
+            
+            task = MessageTask(
+                id=task_id,
+                name=task_name,
+                message_type=msg_type,
+                message_template=task_package.get("message_template", ""),
+                web_hook_url=task_package.get("web_hook_url", ""),
+                cron_exp=task_package.get("cron_exp", ""),
+                headers=task_package.get("headers", ""),
+                cookies=task_package.get("cookies", ""),
+                status=0
+            )
+            print_info(f"创建临时任务对象: {task_name}")
         
         for feed_data in feeds_data:
             try:

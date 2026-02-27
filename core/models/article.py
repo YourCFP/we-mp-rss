@@ -17,6 +17,7 @@ class ArticleBase(Base):
     is_read = Column(Integer, default=0)
 class Article(ArticleBase):
     content = Column(Text)
+    content_html = Column(Text)
     
     def to_dict(self):
         """将Article对象转换为字典"""
@@ -27,7 +28,7 @@ class Article(ArticleBase):
             'pic_url': self.pic_url,
             'url': self.url,
             'description': self.description,
-            'content': self.content,
+            'content_html': self.content_html,
             'status': self.status,
             'publish_time': self.publish_time,
             'created_at': self.created_at.isoformat() if self.created_at else None,

@@ -113,6 +113,79 @@ class CascadeTaskDispatcher:
             print_error(f"刷新节点状态失败: {str(e)}")
             return 0
 
+    def notify_children_new_task(self, allocation_id: str, feed_count: int):
+        """
+        通知在线子节点有新任务可认领
+        
+        参数:
+            allocation_id: 任务分配ID
+            feed_count: 公众号数量
+        """
+        import httpx
+        
+        session = DB.get_session()
+        try:
+            # 获取在线子节点
+            online_nodes = session.query(CascadeNode).filter(
+                CascadeNode.node_type == 1,
+                CascadeNode.status == 1,  # 在线
+                CascadeNode.is_active == True
+            ).all()
+            
+            if not online_nodes:
+                print_info("没有在线子节点，跳过通知")
+                return
+            
+            print_info(f"通知 {len(online_nodes)} 个在线子节点有新任务")
+            
+            for node in online_nodes:
+                if not node.callback_url:
+                    continue
+                
+                try:
+                    # 异步发送通知（不阻塞）
+                    asyncio.create_task(self._send_notification(
+                        node.callback_url,
+                        node.api_key,
+                        node.api_secret_hash,
+                        {
+                            "type": "new_task",
+                            "allocation_id": allocation_id,
+                            "feed_count": feed_count,
+                            "timestamp": datetime.utcnow().isoformat()
+                        }
+                    ))
+                except Exception as e:
+                    print_warning(f"通知节点 {node.name} 失败: {str(e)}")
+                    
+        except Exception as e:
+            print_error(f"通知子节点失败: {str(e)}")
+
+    async def _send_notification(
+        self,
+        callback_url: str,
+        api_key: str,
+        api_secret_hash: str,
+        data: dict
+    ):
+        """发送通知到子节点"""
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.post(
+                    callback_url,
+                    json=data,
+                    headers={
+                        "Authorization": f"AK-SK {api_key}:{api_secret_hash}",
+                        "Content-Type": "application/json"
+                    }
+                )
+                if response.status_code == 200:
+                    print_info(f"通知成功: {callback_url}")
+                else:
+                    print_warning(f"通知失败: {callback_url} - {response.status_code}")
+        except Exception as e:
+            print_warning(f"通知请求失败: {callback_url} - {str(e)}")
+
     def select_node_for_feed(self, mp_id: str) -> Optional[str]:
         """
         为指定公众号选择合适的节点
@@ -286,6 +359,8 @@ class CascadeTaskDispatcher:
             
             if allocation:
                 print_success(f"任务记录创建完成: {len(feeds)}个公众号等待子节点认领")
+                # 通知在线子节点有新任务
+                self.notify_children_new_task(allocation.id, len(feeds))
                 return True
             else:
                 print_warning(f"任务 {task.name} 记录创建失败")

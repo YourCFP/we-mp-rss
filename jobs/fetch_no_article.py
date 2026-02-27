@@ -39,6 +39,7 @@ def fetch_articles_without_content():
             if content:
                 # 更新内容
                 article.content = content
+                article.content_html = Web.clean_article_content(content)
                 if  content=="DELETED":
                     print_error(f"获取文章 {article.title} 内容已被发布者删除")
                     article.status = DATA_STATUS.DELETED

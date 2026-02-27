@@ -381,10 +381,18 @@ class CascadeClient:
         result = await self._request("POST", "/api/v1/wx/cascade/report-result", data=data)
         return result
     
-    async def send_heartbeat(self) -> dict:
-        """发送心跳到父节点"""
+    async def send_heartbeat(self, callback_url: str = None) -> dict:
+        """
+        发送心跳到父节点
+        
+        参数:
+            callback_url: 可选，子节点的通知回调地址
+        """
         try:
-            result = await self._request("POST", "/api/v1/wx/cascade/heartbeat")
+            data = {}
+            if callback_url:
+                data["callback_url"] = callback_url
+            result = await self._request("POST", "/api/v1/wx/cascade/heartbeat", data=data if data else None)
             print_info("心跳发送成功")
             return result
         except Exception as e:

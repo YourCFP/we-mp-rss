@@ -11,6 +11,7 @@ class CascadeNode(Base):
     name = Column(String(255), nullable=False)  # 节点名称
     description = Column(Text)  # 节点描述
     api_url = Column(String(500))  # API地址 (子节点配置父节点地址时使用)
+    callback_url = Column(String(500))  # 回调地址 (网关通知子节点时使用)
     api_key = Column(String(100))  # 认证AK (子节点连接父节点使用)
     api_secret_hash = Column(String(64))  # 认证SK哈希值
     parent_id = Column(String(255))  # 父节点ID (仅子节点使用)

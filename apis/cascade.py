@@ -437,11 +437,20 @@ async def heartbeat(
     """
     子节点心跳接口
     
-    用于保持连接活跃
+    用于保持连接活跃，并可注册回调地址
     """
     try:
         # 获取认证信息中的节点ID
         auth_header = request.headers.get("Authorization", "")
+        callback_url = None
+        
+        # 尝试获取回调地址
+        try:
+            body = await request.json()
+            callback_url = body.get("callback_url") if body else None
+        except:
+            pass
+        
         if auth_header.startswith("AK-SK "):
             credentials = auth_header[6:].strip()
             api_key = credentials.split(':')[0] if ':' in credentials else credentials
@@ -455,10 +464,50 @@ async def heartbeat(
             if node:
                 node.status = 1  # 在线
                 node.last_heartbeat_at = datetime.utcnow()
+                # 更新回调地址
+                if callback_url:
+                    node.callback_url = callback_url
                 session.commit()
         
         return success_response({"status": "alive"})
     except Exception as e:
+        return error_response(code=500, message=str(e))
+
+
+@router.post("/notify", summary="接收父节点通知（子节点使用）")
+async def receive_notification(
+    request: Request,
+    current_user: dict = Depends(get_current_user_or_ak)
+):
+    """
+    子节点接收父节点的任务通知
+    
+    当网关有新任务时，会主动通知子节点来认领
+    """
+    try:
+        body = await request.json()
+        notification_type = body.get("type")
+        
+        print_info(f"收到父节点通知: {notification_type}")
+        
+        # 检查是否为子节点
+        from core.config import cfg
+        if cfg.get("cascade.node_type") != "child":
+            return error_response(code=400, message="仅子节点可接收通知")
+        
+        # 处理通知
+        from jobs.cascade_sync import cascade_sync_service
+        import asyncio
+        
+        if cascade_sync_service.sync_enabled:
+            # 异步处理通知
+            asyncio.create_task(cascade_sync_service.handle_task_notification(body))
+            return success_response(message="通知已接收")
+        else:
+            return error_response(code=400, message="同步服务未启用")
+            
+    except Exception as e:
+        print_error(f"处理通知失败: {str(e)}")
         return error_response(code=500, message=str(e))
 
 
